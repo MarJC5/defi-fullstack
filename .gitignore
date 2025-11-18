@@ -1,1 +1,32 @@
+# Environment
+.env
+.env.local
+
+# SSL certificates
+nginx/certs/*.key
+nginx/certs/*.crt
+
+# Backend
+backend/vendor/
+backend/var/
+backend/config/jwt/*.pem
+backend/.phpunit.result.cache
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/coverage/
+frontend/.vite/
+
+# IDE
 .idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

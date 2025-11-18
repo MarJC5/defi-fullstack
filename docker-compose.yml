@@ -1,0 +1,100 @@
+services:
+  # Reverse proxy - Production
+  nginx:
+    container_name: trainrouting-nginx
+    profiles: ["prod"]
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+      - frontend_dist:/usr/share/nginx/html/app:ro
+    depends_on:
+      - backend
+      - frontend-builder
+    restart: unless-stopped
+
+  # Reverse proxy - Development
+  nginx-dev:
+    container_name: trainrouting-nginx-dev
+    profiles: ["dev"]
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.dev.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+    depends_on:
+      - backend
+      - frontend
+    restart: unless-stopped
+
+  # PHP Backend
+  backend:
+    container_name: trainrouting-backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      - APP_ENV=${APP_ENV:-dev}
+      - APP_SECRET=${APP_SECRET}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?serverVersion=16&charset=utf8
+      - CORS_ALLOW_ORIGIN=${CORS_ALLOW_ORIGIN}
+      - JWT_SECRET_KEY=%kernel.project_dir%/config/jwt/private.pem
+      - JWT_PUBLIC_KEY=%kernel.project_dir%/config/jwt/public.pem
+      - JWT_PASSPHRASE=${JWT_PASSPHRASE}
+    volumes:
+      - ./backend:/var/www/html
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Vue Frontend - Development (hot reload)
+  frontend:
+    container_name: trainrouting-frontend
+    profiles: ["dev"]
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: dev
+    environment:
+      - VITE_API_URL=/api/v1
+    volumes:
+      - ./frontend:/app
+    restart: unless-stopped
+
+  # Vue Frontend - Production (build static files)
+  frontend-builder:
+    container_name: trainrouting-builder
+    profiles: ["prod"]
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: build
+    volumes:
+      - frontend_dist:/app/dist
+
+  # Database
+  db:
+    container_name: trainrouting-db
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  frontend_dist:

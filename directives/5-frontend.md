@@ -12,35 +12,42 @@
 
 ## Project Setup
 
-### Directory Structure
+### Initial Setup (Official Vuetify Scaffolding)
+
+```bash
+# Create project with Vuetify CLI
+npm create vuetify@latest frontend -- --preset essentials --typescript --package-manager npm
+
+# Add additional dependencies
+cd frontend
+npm install axios
+npm install -D tailwindcss @tailwindcss/vite vitest @vitest/coverage-v8 @vue/test-utils
+```
+
+### Directory Structure (Vuetify Scaffolding)
 
 ```
 frontend/
 ├── src/
 │   ├── assets/
 │   ├── components/
+│   │   ├── AppFooter.vue
 │   │   ├── RouteForm.vue
 │   │   ├── RouteResult.vue
-│   │   ├── StationSelect.vue
-│   │   └── StatsChart.vue
-│   ├── composables/
-│   │   ├── useApi.ts
-│   │   ├── useRoutes.ts
-│   │   └── useStats.ts
-│   ├── services/
-│   │   ├── api.ts
-│   │   ├── routeService.ts
-│   │   └── statsService.ts
-│   ├── types/
-│   │   ├── api.ts
-│   │   └── route.ts
-│   ├── views/
-│   │   ├── HomeView.vue
-│   │   └── StatsView.vue
-│   ├── router/
-│   │   └── index.ts
+│   │   └── StationSelect.vue
+│   ├── layouts/
+│   │   └── default.vue
+│   ├── pages/              # File-based routing
+│   │   ├── index.vue       # Home page
+│   │   └── stats.vue       # Stats page
 │   ├── plugins/
+│   │   ├── index.ts
 │   │   └── vuetify.ts
+│   ├── router/
+│   ├── stores/
+│   │   └── app.ts
+│   ├── styles/
+│   │   └── settings.scss
 │   ├── App.vue
 │   └── main.ts
 ├── tests/
@@ -55,10 +62,8 @@ frontend/
 ├── index.html
 ├── package.json
 ├── tsconfig.json
-├── vite.config.ts
-├── vitest.config.ts
+├── vite.config.mts
 ├── eslint.config.js
-├── .prettierrc
 └── Dockerfile
 ```
 

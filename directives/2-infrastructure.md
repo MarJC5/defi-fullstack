@@ -19,8 +19,8 @@
            │                  │
      ┌─────▼─────┐      ┌─────▼─────┐
      │  frontend │      │  backend  │
-     │  (Vue/TS) │      │  (PHP)    │
-     │   :3000   │      │   :8000   │
+     │  (Vue/TS) │      │ (PHP-FPM) │
+     │   :3000   │      │   :9000   │
      └───────────┘      └─────┬─────┘
                               │
                         ┌─────▼─────┐
@@ -34,12 +34,14 @@
 
 ## docker-compose.yml
 
-```yaml
-version: '3.8'
+Uses **explicit profiles** to separate dev and prod environments:
 
+```yaml
 services:
-  # Reverse proxy
+  # Reverse proxy - Production
   nginx:
+    container_name: trainrouting-nginx
+    profiles: ["prod"]
     image: nginx:alpine
     ports:
       - "80:80"
@@ -47,125 +49,195 @@ services:
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/certs:/etc/nginx/certs:ro
+      - frontend_dist:/usr/share/nginx/html/app:ro
     depends_on:
-      - frontend
       - backend
+      - frontend-builder
+    restart: unless-stopped
+
+  # Reverse proxy - Development
+  nginx-dev:
+    container_name: trainrouting-nginx-dev
+    profiles: ["dev"]
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.dev.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+    depends_on:
+      - backend
+      - frontend
+    restart: unless-stopped
 
   # PHP Backend
   backend:
+    container_name: trainrouting-backend
     build:
       context: ./backend
       dockerfile: Dockerfile
     environment:
-      - APP_ENV=dev
-      - DATABASE_URL=postgresql://app:secret@db:5432/trainrouting
-      - JWT_SECRET=${JWT_SECRET}
+      - APP_ENV=${APP_ENV:-dev}
+      - APP_SECRET=${APP_SECRET}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?serverVersion=16&charset=utf8
+      - CORS_ALLOW_ORIGIN=${CORS_ALLOW_ORIGIN}
+      - JWT_SECRET_KEY=%kernel.project_dir%/config/jwt/private.pem
+      - JWT_PUBLIC_KEY=%kernel.project_dir%/config/jwt/public.pem
+      - JWT_PASSPHRASE=${JWT_PASSPHRASE}
     volumes:
       - ./backend:/var/www/html
     depends_on:
       db:
         condition: service_healthy
+    restart: unless-stopped
 
-  # Vue Frontend
+  # Vue Frontend - Development (hot reload)
   frontend:
+    container_name: trainrouting-frontend
+    profiles: ["dev"]
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      target: dev
     environment:
       - VITE_API_URL=/api/v1
     volumes:
       - ./frontend:/app
-      - /app/node_modules
+    restart: unless-stopped
+
+  # Vue Frontend - Production (build static files)
+  frontend-builder:
+    container_name: trainrouting-builder
+    profiles: ["prod"]
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: build
+    volumes:
+      - frontend_dist:/app/dist
 
   # Database
   db:
+    container_name: trainrouting-db
     image: postgres:16-alpine
     environment:
-      - POSTGRES_DB=trainrouting
-      - POSTGRES_USER=app
-      - POSTGRES_PASSWORD=secret
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U app -d trainrouting"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
 
 volumes:
   postgres_data:
+  frontend_dist:
+```
+
+### Usage
+
+```bash
+# Production (compiled static files)
+docker compose --profile prod up -d
+
+# Development (hot reload)
+docker compose --profile dev up -d
+
+# Stop all containers
+docker compose --profile dev --profile prod down --remove-orphans
 ```
 
 ---
 
 ## Dockerfiles
 
-### Backend (PHP 8.4)
+### Backend (PHP 8.4-FPM)
 
 ```dockerfile
 # backend/Dockerfile
 FROM php:8.4-fpm-alpine
 
-# Install extensions
+# Install system dependencies
 RUN apk add --no-cache \
     postgresql-dev \
-    && docker-php-ext-install pdo_pgsql
+    icu-dev \
+    && docker-php-ext-install \
+    pdo_pgsql \
+    intl \
+    opcache
 
 # Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www/html
 
-# Install dependencies first (cache layer)
-COPY composer.json composer.lock ./
-RUN composer install --no-dev --no-scripts --no-autoloader
+# Copy composer files first (for caching)
+COPY composer.json composer.lock* ./
 
-# Copy source
+# Install dependencies (if composer files exist)
+RUN if [ -f composer.json ]; then composer install --no-dev --no-scripts --no-autoloader; fi
+
+# Copy source code
 COPY . .
-RUN composer dump-autoload --optimize
 
-# Dev stage with xdebug
-FROM php:8.4-fpm-alpine as dev
-RUN apk add --no-cache postgresql-dev \
-    && docker-php-ext-install pdo_pgsql \
-    && pecl install xdebug \
-    && docker-php-ext-enable xdebug
+# Generate autoloader (if vendor exists)
+RUN if [ -d vendor ]; then composer dump-autoload --optimize; fi
+
+# Set permissions
+RUN chown -R www-data:www-data /var/www/html
+
+EXPOSE 9000
+
+CMD ["php-fpm"]
 ```
 
-### Frontend (Vue/TS)
+### Frontend (Vue/TS) - Multi-stage
 
 ```dockerfile
 # frontend/Dockerfile
-FROM node:20-alpine
+
+# Development stage
+FROM node:20-alpine AS dev
 
 WORKDIR /app
 
-# Install dependencies first (cache layer)
-COPY package.json package-lock.json ./
-RUN npm ci
-
-# Copy source
-COPY . .
-
-# Dev server
 EXPOSE 3000
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
 
-# Production build stage
-FROM node:20-alpine as build
+# Install dependencies and start dev server
+# Dependencies are installed at runtime since source is mounted
+CMD ["sh", "-c", "if [ -f package-lock.json ]; then npm ci; else npm install; fi && npm run dev"]
+
+# Build stage
+FROM node:20-alpine AS build
+
 WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci
+
+COPY package*.json ./
+RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
+
 COPY . .
 RUN npm run build
 
-FROM nginx:alpine as prod
-COPY --from=build /app/dist /usr/share/nginx/html
+# Production stage - static files only
+FROM scratch AS prod
+
+COPY --from=build /app/dist /dist
 ```
 
 ---
 
 ## Nginx Configuration
+
+Two separate configs for production and development:
+
+### Production Config (nginx/nginx.conf)
+
+Serves static files from the built frontend:
 
 ```nginx
 # nginx/nginx.conf
@@ -176,12 +248,11 @@ events {
 http {
     include mime.types;
 
-    upstream backend {
-        server backend:8000;
-    }
+    # DNS resolver for Docker
+    resolver 127.0.0.11 valid=30s;
 
-    upstream frontend {
-        server frontend:3000;
+    upstream backend {
+        server backend:9000;
     }
 
     # Redirect HTTP to HTTPS
@@ -212,25 +283,48 @@ http {
         add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
         add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:;" always;
 
-        # API routes -> backend
+        # API routes -> backend (PHP-FPM)
         location /api/ {
-            proxy_pass http://backend;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
+            fastcgi_pass backend;
+            fastcgi_param SCRIPT_FILENAME /var/www/html/public/index.php;
+            include fastcgi_params;
+            fastcgi_param REQUEST_URI $request_uri;
+            fastcgi_param QUERY_STRING $query_string;
         }
 
-        # Everything else -> frontend
+        # Static assets (production)
+        location /assets/ {
+            alias /usr/share/nginx/html/app/assets/;
+            expires 1y;
+            add_header Cache-Control "public, immutable";
+        }
+
+        # Frontend routes - serve static files (production)
         location / {
-            proxy_pass http://frontend;
+            root /usr/share/nginx/html/app;
+            try_files $uri $uri/ /index.html;
+        }
+    }
+}
+```
+
+### Development Config (nginx/nginx.dev.conf)
+
+Proxies to Vite dev server for hot reload:
+
+```nginx
+# nginx/nginx.dev.conf
+# Same as production config except for frontend location:
+
+        # Frontend routes - proxy to Vite dev server
+        location / {
+            set $upstream http://frontend:3000;
+            proxy_pass $upstream;
             proxy_http_version 1.1;
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection "upgrade";
             proxy_set_header Host $host;
         }
-    }
-}
 ```
 
 ### Generate Self-Signed Certificates (Development)
@@ -538,14 +632,22 @@ help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "${GREEN}%-15s${RESET} %s\n", $$1, $$2}'
 
 ## Setup
-install: certs ## Initial project setup
+install: certs ## Initial project setup (production)
 	cp -n .env.example .env || true
-	docker compose build
-	docker compose up -d
+	docker compose --profile prod build
+	docker compose --profile prod up -d
+	docker compose exec backend composer install --no-dev --optimize-autoloader
+	$(MAKE) db-migrate
+	@echo "${GREEN}Setup complete! Access https://localhost${RESET}"
+
+install-dev: certs ## Development setup (hot reload)
+	cp -n .env.example .env || true
+	docker compose --profile dev build
+	docker compose --profile dev up -d
 	docker compose exec backend composer install
 	docker compose exec frontend npm install
 	$(MAKE) db-migrate
-	@echo "${GREEN}Setup complete! Access https://localhost${RESET}"
+	@echo "${GREEN}Dev setup complete! Access https://localhost${RESET}"
 
 certs: ## Generate SSL certificates
 	mkdir -p nginx/certs
@@ -555,15 +657,24 @@ certs: ## Generate SSL certificates
 		-subj "/C=CH/ST=Vaud/L=Montreux/O=Dev/CN=localhost"
 
 ## Docker
-start: ## Start all containers
-	docker compose up -d
+start: ## Start all containers (prod)
+	docker compose --profile dev down --remove-orphans 2>/dev/null || true
+	docker compose --profile prod up -d
+
+start-dev: ## Start all containers (dev with hot reload)
+	docker compose --profile prod down --remove-orphans 2>/dev/null || true
+	docker compose --profile dev up -d
 
 stop: ## Stop all containers
-	docker compose down
+	docker compose --profile dev --profile prod down --remove-orphans
 
-restart: ## Restart all containers
-	docker compose down
-	docker compose up -d
+restart: ## Restart all containers (prod)
+	docker compose --profile dev --profile prod down --remove-orphans
+	docker compose --profile prod up -d
+
+restart-dev: ## Restart all containers (dev)
+	docker compose --profile dev --profile prod down --remove-orphans
+	docker compose --profile dev up -d
 
 logs: ## Show container logs
 	docker compose logs -f
@@ -648,11 +759,15 @@ jwt-keys: ## Generate JWT keys
 # Show all commands
 make help
 
-# First time setup
+# First time setup (production)
 make install
 
+# First time setup (development with hot reload)
+make install-dev
+
 # Daily workflow
-make start
+make start        # prod mode
+make start-dev    # dev mode with hot reload
 make test
 make lint
 make stop
