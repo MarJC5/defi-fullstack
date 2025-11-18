@@ -1,0 +1,752 @@
+# Infrastructure - Docker, CI/CD & DevOps
+
+## Why Infrastructure First?
+
+1. **Reproducible environment**: Same setup for dev/CI/prod
+2. **TDD enablement**: Can't run tests without environment
+3. **Fast feedback loop**: `docker compose up` -> code -> test -> repeat
+4. **No "works on my machine"**: Everyone uses same containers
+
+---
+
+## Docker Architecture
+
+```
+┌─────────────────────────────────────────────────┐
+│                   nginx (443/80)                │
+│                  reverse proxy                  │
+└──────────┬──────────────────┬───────────────────┘
+           │                  │
+     ┌─────▼─────┐      ┌─────▼─────┐
+     │  frontend │      │  backend  │
+     │  (Vue/TS) │      │  (PHP)    │
+     │   :3000   │      │   :8000   │
+     └───────────┘      └─────┬─────┘
+                              │
+                        ┌─────▼─────┐
+                        │    db     │
+                        │ postgres  │
+                        │   :5432   │
+                        └───────────┘
+```
+
+---
+
+## docker-compose.yml
+
+```yaml
+version: '3.8'
+
+services:
+  # Reverse proxy
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+    depends_on:
+      - frontend
+      - backend
+
+  # PHP Backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      - APP_ENV=dev
+      - DATABASE_URL=postgresql://app:secret@db:5432/trainrouting
+      - JWT_SECRET=${JWT_SECRET}
+    volumes:
+      - ./backend:/var/www/html
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # Vue Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    environment:
+      - VITE_API_URL=/api/v1
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+
+  # Database
+  db:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_DB=trainrouting
+      - POSTGRES_USER=app
+      - POSTGRES_PASSWORD=secret
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d trainrouting"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+```
+
+---
+
+## Dockerfiles
+
+### Backend (PHP 8.4)
+
+```dockerfile
+# backend/Dockerfile
+FROM php:8.4-fpm-alpine
+
+# Install extensions
+RUN apk add --no-cache \
+    postgresql-dev \
+    && docker-php-ext-install pdo_pgsql
+
+# Install Composer
+COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+
+WORKDIR /var/www/html
+
+# Install dependencies first (cache layer)
+COPY composer.json composer.lock ./
+RUN composer install --no-dev --no-scripts --no-autoloader
+
+# Copy source
+COPY . .
+RUN composer dump-autoload --optimize
+
+# Dev stage with xdebug
+FROM php:8.4-fpm-alpine as dev
+RUN apk add --no-cache postgresql-dev \
+    && docker-php-ext-install pdo_pgsql \
+    && pecl install xdebug \
+    && docker-php-ext-enable xdebug
+```
+
+### Frontend (Vue/TS)
+
+```dockerfile
+# frontend/Dockerfile
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install dependencies first (cache layer)
+COPY package.json package-lock.json ./
+RUN npm ci
+
+# Copy source
+COPY . .
+
+# Dev server
+EXPOSE 3000
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+
+# Production build stage
+FROM node:20-alpine as build
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+FROM nginx:alpine as prod
+COPY --from=build /app/dist /usr/share/nginx/html
+```
+
+---
+
+## Nginx Configuration
+
+```nginx
+# nginx/nginx.conf
+events {
+    worker_connections 1024;
+}
+
+http {
+    include mime.types;
+
+    upstream backend {
+        server backend:8000;
+    }
+
+    upstream frontend {
+        server frontend:3000;
+    }
+
+    # Redirect HTTP to HTTPS
+    server {
+        listen 80;
+        server_name localhost;
+        return 301 https://$host$request_uri;
+    }
+
+    # HTTPS server
+    server {
+        listen 443 ssl;
+        server_name localhost;
+
+        # SSL certificates
+        ssl_certificate /etc/nginx/certs/server.crt;
+        ssl_certificate_key /etc/nginx/certs/server.key;
+
+        # SSL settings
+        ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256;
+        ssl_prefer_server_ciphers off;
+
+        # Security headers
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-XSS-Protection "1; mode=block" always;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:;" always;
+
+        # API routes -> backend
+        location /api/ {
+            proxy_pass http://backend;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Everything else -> frontend
+        location / {
+            proxy_pass http://frontend;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $host;
+        }
+    }
+}
+```
+
+### Generate Self-Signed Certificates (Development)
+
+```bash
+# Create certs directory
+mkdir -p nginx/certs
+
+# Generate self-signed certificate
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout nginx/certs/server.key \
+  -out nginx/certs/server.crt \
+  -subj "/C=CH/ST=Vaud/L=Montreux/O=Dev/CN=localhost"
+```
+
+### .gitignore for certificates
+
+```gitignore
+# Don't commit real certificates
+nginx/certs/*.key
+nginx/certs/*.crt
+!nginx/certs/.gitkeep
+```
+
+---
+
+## CI/CD Pipeline (GitHub Actions)
+
+### .github/workflows/ci.yml
+
+```yaml
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # ============ LINT ============
+  lint-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+      - run: composer install --working-dir=backend
+      - run: ./backend/vendor/bin/phpcs backend/src
+
+  lint-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      - run: cd frontend && npm ci
+      - run: cd frontend && npm run lint
+
+  # ============ TEST ============
+  test-backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: test
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: xdebug
+      - run: composer install --working-dir=backend
+      - run: |
+          cd backend
+          ./vendor/bin/phpunit --coverage-clover=coverage.xml
+      - name: Check coverage threshold
+        run: |
+          coverage=$(grep -oP 'lines-valid="\K[\d]+' backend/coverage.xml)
+          covered=$(grep -oP 'lines-covered="\K[\d]+' backend/coverage.xml)
+          percent=$((covered * 100 / coverage))
+          echo "Coverage: $percent%"
+          if [ $percent -lt 80 ]; then exit 1; fi
+
+  test-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      - run: cd frontend && npm ci
+      - run: cd frontend && npm run test:coverage
+
+  # ============ SECURITY ============
+  security-phpstan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+      - run: composer install --working-dir=backend
+      - run: ./backend/vendor/bin/phpstan analyse backend/src --level=8
+
+  security-npm-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cd frontend && npm audit --audit-level=high
+    continue-on-error: true
+
+  security-trivy:
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Trivy scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:${{ github.sha }}
+          severity: 'HIGH,CRITICAL'
+
+  # ============ BUILD ============
+  build:
+    runs-on: ubuntu-latest
+    needs: [lint-backend, lint-frontend, test-backend, test-frontend]
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:${{ github.sha }}
+
+      - name: Build and push frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:${{ github.sha }}
+
+  # ============ RELEASE ============
+  release:
+    runs-on: ubuntu-latest
+    needs: [build, security-phpstan, security-trivy]
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Determine tag
+        id: tag
+        run: |
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=$(date +%Y.%m.%d)-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Tag and push release images
+        run: |
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:${{ github.sha }}
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:${{ github.sha }}
+          docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:${{ github.sha }} ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:${{ steps.tag.outputs.tag }}
+          docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:${{ github.sha }} ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:${{ steps.tag.outputs.tag }}
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:${{ steps.tag.outputs.tag }}
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:${{ steps.tag.outputs.tag }}
+```
+
+---
+
+## Changelog
+
+### Format (Keep a Changelog)
+
+Follow [keepachangelog.com](https://keepachangelog.com) format:
+
+```markdown
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Added
+- Initial project setup with Symfony 7 and Vue.js 3
+
+## [1.0.0] - 2025-01-15
+
+### Added
+- Route calculation API endpoint (POST /api/v1/routes)
+- Dijkstra algorithm for shortest path
+- JWT authentication
+- Vue.js frontend with Vuetify 3
+- Docker Compose deployment
+- CI/CD pipeline with GitHub Actions
+
+### Security
+- HTTPS with TLS 1.2/1.3
+- Security headers (HSTS, CSP, X-Frame-Options)
+- CORS configuration
+
+## [0.1.0] - 2025-01-10
+
+### Added
+- Project scaffolding
+- Database schema and migrations
+- Basic API structure
+```
+
+### Change Types
+
+| Type | Description |
+|------|-------------|
+| `Added` | New features |
+| `Changed` | Changes in existing functionality |
+| `Deprecated` | Soon-to-be removed features |
+| `Removed` | Removed features |
+| `Fixed` | Bug fixes |
+| `Security` | Vulnerability fixes |
+
+### Versioning Strategy
+
+- **Semantic**: `MAJOR.MINOR.PATCH` (e.g., 1.2.3)
+- **Calendar** (alternative): `YYYY.MM.DD` (e.g., 2025.01.15)
+
+For this challenge, semantic versioning is recommended:
+- Start at `0.1.0` during development
+- Release `1.0.0` when all features complete
+
+### Git Tags
+
+```bash
+# Create annotated tag
+git tag -a v1.0.0 -m "Release v1.0.0 - Initial release"
+
+# Push tag
+git push origin v1.0.0
+```
+
+---
+
+## Makefile
+
+A Makefile simplifies common commands and provides a consistent interface.
+
+```makefile
+# Makefile
+
+.PHONY: help install start stop restart logs test lint coverage build clean db-migrate db-reset certs
+
+# Colors
+GREEN  := $(shell tput -Txterm setaf 2)
+YELLOW := $(shell tput -Txterm setaf 3)
+RESET  := $(shell tput -Txterm sgr0)
+
+## Help
+help: ## Show this help
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "${GREEN}%-15s${RESET} %s\n", $$1, $$2}'
+
+## Setup
+install: certs ## Initial project setup
+	cp -n .env.example .env || true
+	docker compose build
+	docker compose up -d
+	docker compose exec backend composer install
+	docker compose exec frontend npm install
+	$(MAKE) db-migrate
+	@echo "${GREEN}Setup complete! Access https://localhost${RESET}"
+
+certs: ## Generate SSL certificates
+	mkdir -p nginx/certs
+	openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+		-keyout nginx/certs/server.key \
+		-out nginx/certs/server.crt \
+		-subj "/C=CH/ST=Vaud/L=Montreux/O=Dev/CN=localhost"
+
+## Docker
+start: ## Start all containers
+	docker compose up -d
+
+stop: ## Stop all containers
+	docker compose down
+
+restart: ## Restart all containers
+	docker compose down
+	docker compose up -d
+
+logs: ## Show container logs
+	docker compose logs -f
+
+logs-backend: ## Show backend logs
+	docker compose logs -f backend
+
+logs-frontend: ## Show frontend logs
+	docker compose logs -f frontend
+
+## Testing
+test: test-backend test-frontend ## Run all tests
+
+test-backend: ## Run backend tests
+	docker compose exec backend ./vendor/bin/phpunit
+
+test-frontend: ## Run frontend tests
+	docker compose exec frontend npm test
+
+coverage: coverage-backend coverage-frontend ## Generate coverage reports
+
+coverage-backend: ## Generate backend coverage
+	docker compose exec backend ./vendor/bin/phpunit --coverage-html var/coverage
+	@echo "${GREEN}Backend coverage: backend/var/coverage/index.html${RESET}"
+
+coverage-frontend: ## Generate frontend coverage
+	docker compose exec frontend npm run test:coverage
+	@echo "${GREEN}Frontend coverage: frontend/coverage/index.html${RESET}"
+
+## Linting
+lint: lint-backend lint-frontend ## Run all linters
+
+lint-backend: ## Lint backend code
+	docker compose exec backend ./vendor/bin/phpcs src
+	docker compose exec backend ./vendor/bin/phpstan analyse src
+
+lint-frontend: ## Lint frontend code
+	docker compose exec frontend npm run lint
+
+lint-fix: ## Fix linting issues
+	docker compose exec backend ./vendor/bin/phpcbf src || true
+	docker compose exec frontend npm run lint:fix
+
+## Database
+db-migrate: ## Run database migrations
+	docker compose exec backend php bin/console doctrine:migrations:migrate --no-interaction
+
+db-reset: ## Reset database (WARNING: destroys data)
+	docker compose down -v
+	docker compose up -d db
+	sleep 3
+	docker compose up -d backend
+	$(MAKE) db-migrate
+
+db-shell: ## Open database shell
+	docker compose exec db psql -U app -d trainrouting
+
+## Build
+build: ## Build production images
+	docker compose build --no-cache
+
+clean: ## Remove containers, volumes, and generated files
+	docker compose down -v --remove-orphans
+	rm -rf backend/var/cache backend/var/log backend/vendor
+	rm -rf frontend/node_modules frontend/dist frontend/coverage
+	rm -rf nginx/certs/*.key nginx/certs/*.crt
+
+## Utilities
+shell-backend: ## Open backend shell
+	docker compose exec backend sh
+
+shell-frontend: ## Open frontend shell
+	docker compose exec frontend sh
+
+jwt-keys: ## Generate JWT keys
+	docker compose exec backend php bin/console lexik:jwt:generate-keypair --skip-if-exists
+```
+
+### Usage
+
+```bash
+# Show all commands
+make help
+
+# First time setup
+make install
+
+# Daily workflow
+make start
+make test
+make lint
+make stop
+
+# Run specific tests
+make test-backend
+make coverage
+
+# Database operations
+make db-migrate
+make db-reset
+make db-shell
+
+# Cleanup
+make clean
+```
+
+---
+
+## Local Development Workflow
+
+### First Setup (with Makefile)
+```bash
+# Clone and start
+git clone <repo>
+cd defi-fullstack
+
+# One command setup
+make install
+
+# Access
+# Frontend: https://localhost
+# API: https://localhost/api/v1
+```
+
+### Daily Development
+```bash
+# Start services
+make start
+
+# Watch logs
+make logs
+
+# Run tests
+make test
+
+# Lint code
+make lint
+
+# Stop
+make stop
+```
+
+### Database Access
+```bash
+# Open psql shell
+make db-shell
+
+# Reset database
+make db-reset
+```
+
+---
+
+## Environment Variables
+
+### .env.example
+```bash
+# Database
+POSTGRES_DB=trainrouting
+POSTGRES_USER=app
+POSTGRES_PASSWORD=secret
+
+# JWT
+JWT_SECRET=your-secret-key-min-32-chars
+
+# App
+APP_ENV=dev
+```
+
+### Security Notes
+- Never commit `.env` file
+- Use secrets management in CI (GitHub Actions secrets)
+- Rotate JWT_SECRET in production
+
+---
+
+## Deployment Checklist
+
+- [ ] Docker images build successfully
+- [ ] All tests pass with coverage thresholds
+- [ ] Security scans pass (phpstan, npm audit, trivy)
+- [ ] Images pushed to registry
+- [ ] `docker compose up -d` works on fresh machine
+- [ ] API accessible at /api/v1
+- [ ] Frontend loads and connects to API
+- [ ] HTTPS configured (production)
