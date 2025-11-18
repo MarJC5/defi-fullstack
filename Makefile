@@ -13,7 +13,9 @@ help: ## Show this help
 install: certs ## Initial project setup (production)
 	@command -v docker >/dev/null 2>&1 || { echo "${YELLOW}Error: docker is not installed. Please install Docker Desktop first.${RESET}"; exit 1; }
 	cp -n .env.example .env || true
+	cp -n backend/.env.example backend/.env || true
 	@sed -i '' 's/APP_ENV=dev/APP_ENV=prod/' .env 2>/dev/null || sed -i 's/APP_ENV=dev/APP_ENV=prod/' .env
+	@sed -i '' 's/APP_ENV=dev/APP_ENV=prod/' backend/.env 2>/dev/null || sed -i 's/APP_ENV=dev/APP_ENV=prod/' backend/.env
 	docker compose --profile dev down --remove-orphans 2>/dev/null || true
 	docker compose --profile prod build
 	docker compose --profile prod up -d
@@ -24,7 +26,9 @@ install: certs ## Initial project setup (production)
 install-dev: certs ## Development setup (hot reload)
 	@command -v docker >/dev/null 2>&1 || { echo "${YELLOW}Error: docker is not installed. Please install Docker Desktop first.${RESET}"; exit 1; }
 	cp -n .env.example .env || true
+	cp -n backend/.env.example backend/.env || true
 	@sed -i '' 's/APP_ENV=prod/APP_ENV=dev/' .env 2>/dev/null || sed -i 's/APP_ENV=prod/APP_ENV=dev/' .env
+	@sed -i '' 's/APP_ENV=prod/APP_ENV=dev/' backend/.env 2>/dev/null || sed -i 's/APP_ENV=prod/APP_ENV=dev/' backend/.env
 	docker compose --profile prod down --remove-orphans 2>/dev/null || true
 	docker compose --profile dev build
 	docker compose --profile dev up -d
