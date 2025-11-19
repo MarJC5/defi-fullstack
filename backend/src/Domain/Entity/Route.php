@@ -4,16 +4,35 @@ declare(strict_types=1);
 
 namespace App\Domain\Entity;
 
+use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Uid\Uuid;
 
+#[ORM\Entity]
+#[ORM\Table(name: 'routes')]
+#[ORM\Index(columns: ['analytic_code'], name: 'idx_routes_analytic_code')]
+#[ORM\Index(columns: ['created_at'], name: 'idx_routes_created_at')]
 class Route
 {
+    #[ORM\Id]
+    #[ORM\Column(type: 'string', length: 36)]
     private string $id;
+
+    #[ORM\Column(name: 'from_station_id', type: 'string', length: 10)]
     private string $fromStationId;
+
+    #[ORM\Column(name: 'to_station_id', type: 'string', length: 10)]
     private string $toStationId;
+
+    #[ORM\Column(name: 'analytic_code', type: 'string', length: 50)]
     private string $analyticCode;
+
+    #[ORM\Column(name: 'distance_km', type: 'float')]
     private float $distanceKm;
+
+    #[ORM\Column(type: 'json')]
     private array $path;
+
+    #[ORM\Column(name: 'created_at', type: 'datetime_immutable')]
     private \DateTimeImmutable $createdAt;
 
     public function __construct(

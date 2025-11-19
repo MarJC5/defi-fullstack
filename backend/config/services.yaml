@@ -19,7 +19,7 @@ services:
 
     # Repository interface binding
     App\Domain\Repository\RouteRepositoryInterface:
-        class: App\Infrastructure\Repository\InMemoryRouteRepository
+        class: App\Infrastructure\Repository\DoctrineRouteRepository
 
     # Handler with explicit configuration for file path
     App\Application\Handler\CalculateRouteHandler:

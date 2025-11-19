@@ -6,16 +6,23 @@ namespace App\Tests\Integration;
 
 use App\Domain\Entity\Route;
 use App\Domain\Repository\RouteRepositoryInterface;
+use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 
 class DoctrineRouteRepositoryTest extends KernelTestCase
 {
     private RouteRepositoryInterface $repository;
+    private EntityManagerInterface $entityManager;
 
     protected function setUp(): void
     {
         self::bootKernel();
         $this->repository = static::getContainer()->get(RouteRepositoryInterface::class);
+        $this->entityManager = static::getContainer()->get(EntityManagerInterface::class);
+
+        // Clean up database before each test
+        $connection = $this->entityManager->getConnection();
+        $connection->executeStatement('TRUNCATE TABLE routes CASCADE');
     }
 
     public function testSaveAndFindById(): void
