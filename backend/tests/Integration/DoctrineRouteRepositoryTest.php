@@ -48,6 +48,13 @@ class DoctrineRouteRepositoryTest extends KernelTestCase
         $this->assertEquals(['MX', 'CGE'], $found->getPath());
     }
 
+    public function testFindByIdReturnsNullWhenNotFound(): void
+    {
+        $found = $this->repository->findById('non-existent-id');
+
+        $this->assertNull($found);
+    }
+
     public function testFindByAnalyticCode(): void
     {
         $route1 = new Route('MX', 'CGE', 'CODE-001', 2.5, ['MX', 'CGE']);
@@ -64,6 +71,34 @@ class DoctrineRouteRepositoryTest extends KernelTestCase
         foreach ($routes as $route) {
             $this->assertEquals('CODE-001', $route->getAnalyticCode());
         }
+    }
+
+    public function testFindByAnalyticCodeWithDateFilters(): void
+    {
+        $route = new Route('MX', 'CGE', 'FILTER-001', 2.5, ['MX', 'CGE']);
+        $this->repository->save($route);
+
+        $today = new \DateTimeImmutable();
+        $yesterday = $today->modify('-1 day');
+        $tomorrow = $today->modify('+1 day');
+
+        // Should find route with date range that includes today
+        $routes = $this->repository->findByAnalyticCode('FILTER-001', $yesterday, $tomorrow);
+        $this->assertCount(1, $routes);
+
+        // Should not find route with past date range
+        $lastWeek = $today->modify('-1 week');
+        $lastWeekEnd = $today->modify('-6 days');
+        $routes = $this->repository->findByAnalyticCode('FILTER-001', $lastWeek, $lastWeekEnd);
+        $this->assertCount(0, $routes);
+
+        // Should find with only 'from' filter
+        $routes = $this->repository->findByAnalyticCode('FILTER-001', $yesterday);
+        $this->assertCount(1, $routes);
+
+        // Should find with only 'to' filter
+        $routes = $this->repository->findByAnalyticCode('FILTER-001', null, $tomorrow);
+        $this->assertCount(1, $routes);
     }
 
     public function testGetDistancesByAnalyticCode(): void

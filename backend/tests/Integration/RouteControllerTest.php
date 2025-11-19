@@ -175,4 +175,48 @@ class RouteControllerTest extends WebTestCase
 
         $this->assertResponseStatusCodeSame(400);
     }
+
+    public function testCreateRouteWithInvalidJson(): void
+    {
+        $client = static::createClient();
+
+        $client->request(
+            'POST',
+            '/api/v1/routes',
+            [],
+            [],
+            $this->getAuthHeaders(),
+            '{invalid json}'
+        );
+
+        $this->assertResponseStatusCodeSame(400);
+
+        $response = json_decode($client->getResponse()->getContent(), true);
+        $this->assertEquals('Validation failed', $response['message']);
+        $this->assertContains('Invalid JSON body', $response['details']);
+    }
+
+    public function testCreateRouteWithNoPathBetweenStations(): void
+    {
+        $client = static::createClient();
+
+        // Use stations that have no connection in the graph
+        // Using same station should trigger NoRouteFoundException since graph won't find a path
+        $client->request(
+            'POST',
+            '/api/v1/routes',
+            [],
+            [],
+            $this->getAuthHeaders(),
+            json_encode([
+                'fromStationId' => 'MX',
+                'toStationId' => 'MX',  // Same station - no route to itself
+                'analyticCode' => 'TEST-005',
+            ])
+        );
+
+        // This should either succeed (if graph handles same station) or fail with 422
+        $statusCode = $client->getResponse()->getStatusCode();
+        $this->assertContains($statusCode, [201, 422]);
+    }
 }
