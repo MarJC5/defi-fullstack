@@ -10,5 +10,6 @@ class GetAnalyticDistancesQuery
         public readonly ?string $from = null,
         public readonly ?string $to = null,
         public readonly string $groupBy = 'none'
-    ) {}
+    ) {
+    }
 }

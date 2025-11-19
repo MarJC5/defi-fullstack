@@ -19,7 +19,8 @@ class StatsController extends AbstractController
 {
     public function __construct(
         private readonly GetAnalyticDistancesHandler $handler
-    ) {}
+    ) {
+    }
 
     #[Route('/stats/distances', name: 'get_analytic_distances', methods: ['GET'])]
     #[OA\Get(

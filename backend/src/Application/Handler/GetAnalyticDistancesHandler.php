@@ -11,7 +11,8 @@ class GetAnalyticDistancesHandler
 {
     public function __construct(
         private readonly RouteRepositoryInterface $repository
-    ) {}
+    ) {
+    }
 
     public function handle(GetAnalyticDistancesQuery $query): array
     {

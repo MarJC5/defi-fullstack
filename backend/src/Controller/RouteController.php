@@ -98,13 +98,11 @@ class RouteController extends AbstractController
             $route = $this->handler->handle($command);
 
             return $this->json($route->toArray(), Response::HTTP_CREATED);
-
         } catch (StationNotFoundException $e) {
             return $this->json([
                 'code' => 'STATION_NOT_FOUND',
                 'message' => $e->getMessage(),
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
-
         } catch (NoRouteFoundException $e) {
             return $this->json([
                 'code' => 'NO_ROUTE_FOUND',
