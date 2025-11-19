@@ -66,4 +66,20 @@ class Route
     {
         return $this->createdAt;
     }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function toArray(): array
+    {
+        return [
+            'id' => $this->id,
+            'fromStationId' => $this->fromStationId,
+            'toStationId' => $this->toStationId,
+            'analyticCode' => $this->analyticCode,
+            'distanceKm' => $this->distanceKm,
+            'path' => $this->path,
+            'createdAt' => $this->createdAt->format('c'),
+        ];
+    }
 }
