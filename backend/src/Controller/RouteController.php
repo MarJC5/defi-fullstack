@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\Application\Command\CalculateRouteCommand;
+use App\Application\Handler\CalculateRouteHandler;
 use App\Domain\Exception\NoRouteFoundException;
 use App\Domain\Exception\StationNotFoundException;
-use App\Domain\Service\GraphBuilder;
-use App\Domain\Service\RouteCalculator;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -17,16 +17,9 @@ use Symfony\Component\Routing\Attribute\Route;
 #[Route('/api/v1')]
 class RouteController extends AbstractController
 {
-    private RouteCalculator $calculator;
-
     public function __construct(
-        private readonly GraphBuilder $graphBuilder,
+        private readonly CalculateRouteHandler $handler,
     ) {
-        // Load distances data and build graph
-        $distancesPath = '/var/www/html/data/distances.json';
-        $distancesData = json_decode(file_get_contents($distancesPath), true);
-        $graph = $this->graphBuilder->build($distancesData);
-        $this->calculator = new RouteCalculator($graph);
     }
 
     #[Route('/routes', name: 'create_route', methods: ['POST'])]
@@ -60,11 +53,13 @@ class RouteController extends AbstractController
         }
 
         try {
-            $route = $this->calculator->calculate(
+            $command = new CalculateRouteCommand(
                 $data['fromStationId'],
                 $data['toStationId'],
                 $data['analyticCode']
             );
+
+            $route = $this->handler->handle($command);
 
             return $this->json($route->toArray(), Response::HTTP_CREATED);
 
