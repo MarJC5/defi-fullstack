@@ -29,6 +29,7 @@ services:
     volumes:
       - ./nginx/nginx.dev.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/certs:/etc/nginx/certs:ro
+      - ./backend/public:/var/www/html/public:ro
     depends_on:
       backend:
         condition: service_healthy

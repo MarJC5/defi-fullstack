@@ -8,6 +8,7 @@ use App\Application\Command\CalculateRouteCommand;
 use App\Application\Handler\CalculateRouteHandler;
 use App\Domain\Exception\NoRouteFoundException;
 use App\Domain\Exception\StationNotFoundException;
+use OpenApi\Attributes as OA;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -15,6 +16,7 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 
 #[Route('/api/v1')]
+#[OA\Tag(name: 'Routing')]
 class RouteController extends AbstractController
 {
     public function __construct(
@@ -23,6 +25,40 @@ class RouteController extends AbstractController
     }
 
     #[Route('/routes', name: 'create_route', methods: ['POST'])]
+    #[OA\Post(
+        operationId: 'calculerRoute',
+        summary: 'Calculer un trajet A vers B',
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\JsonContent(
+                required: ['fromStationId', 'toStationId', 'analyticCode'],
+                properties: [
+                    new OA\Property(property: 'fromStationId', type: 'string', example: 'MX'),
+                    new OA\Property(property: 'toStationId', type: 'string', example: 'ZW'),
+                    new OA\Property(property: 'analyticCode', type: 'string', example: 'ANA-123'),
+                ]
+            )
+        ),
+        responses: [
+            new OA\Response(
+                response: 201,
+                description: 'Trajet calculé',
+                content: new OA\JsonContent(
+                    properties: [
+                        new OA\Property(property: 'id', type: 'string'),
+                        new OA\Property(property: 'fromStationId', type: 'string'),
+                        new OA\Property(property: 'toStationId', type: 'string'),
+                        new OA\Property(property: 'analyticCode', type: 'string'),
+                        new OA\Property(property: 'distanceKm', type: 'number'),
+                        new OA\Property(property: 'path', type: 'array', items: new OA\Items(type: 'string')),
+                        new OA\Property(property: 'createdAt', type: 'string', format: 'date-time'),
+                    ]
+                )
+            ),
+            new OA\Response(response: 400, description: 'Requête invalide'),
+            new OA\Response(response: 422, description: 'Données non valides'),
+        ]
+    )]
     public function create(Request $request): JsonResponse
     {
         $content = $request->getContent();

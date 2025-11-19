@@ -55,7 +55,7 @@ class InMemoryRouteRepository implements RouteRepositoryInterface
     }
 
     /**
-     * @return array<array{analyticCode: string, totalDistanceKm: float, groupKey?: string}>
+     * @return array<array{analyticCode: string, totalDistanceKm: float, group?: string}>
      */
     public function getDistancesByAnalyticCode(
         ?\DateTimeImmutable $from = null,
@@ -76,14 +76,14 @@ class InMemoryRouteRepository implements RouteRepositoryInterface
             }
 
             $analyticCode = $route->getAnalyticCode();
-            $groupKey = match ($groupBy) {
+            $group = match ($groupBy) {
                 'day' => $createdAt->format('Y-m-d'),
                 'month' => $createdAt->format('Y-m'),
                 'year' => $createdAt->format('Y'),
                 default => 'all',
             };
 
-            $key = $analyticCode . '_' . $groupKey;
+            $key = $analyticCode . '_' . $group;
 
             if (!isset($aggregations[$key])) {
                 $aggregations[$key] = [
@@ -92,7 +92,7 @@ class InMemoryRouteRepository implements RouteRepositoryInterface
                 ];
 
                 if ($groupBy !== 'none') {
-                    $aggregations[$key]['groupKey'] = $groupKey;
+                    $aggregations[$key]['group'] = $group;
                 }
             }
 

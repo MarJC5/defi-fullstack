@@ -1,0 +1,26 @@
+nelmio_api_doc:
+    documentation:
+        info:
+            title: Train Routing & Analytics API
+            description: >
+                API pour router un train d'une station A à B sur un réseau, calculer la
+                distance parcourue et fournir des statistiques agrégées par code analytique.
+            version: 1.0.0
+            contact:
+                name: Nicolas Girardet
+                email: n.girardet@mob.ch
+        components:
+            securitySchemes:
+                Bearer:
+                    type: http
+                    scheme: bearer
+                    bearerFormat: JWT
+        security:
+            - Bearer: []
+    areas:
+        default:
+            path_patterns:
+                - ^/api(?!/doc)
+    use_validation_groups: true
+    html_config:
+        assets_mode: bundle
