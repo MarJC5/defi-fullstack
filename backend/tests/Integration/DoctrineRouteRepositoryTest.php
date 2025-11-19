@@ -6,6 +6,7 @@ namespace App\Tests\Integration;
 
 use App\Domain\Entity\Route;
 use App\Domain\Repository\RouteRepositoryInterface;
+use App\Domain\Service\IdGeneratorInterface;
 use App\Domain\ValueObject\Distance;
 use App\Domain\ValueObject\StationId;
 use Doctrine\ORM\EntityManagerInterface;
@@ -15,12 +16,14 @@ class DoctrineRouteRepositoryTest extends KernelTestCase
 {
     private RouteRepositoryInterface $repository;
     private EntityManagerInterface $entityManager;
+    private IdGeneratorInterface $idGenerator;
 
     protected function setUp(): void
     {
         self::bootKernel();
         $this->repository = static::getContainer()->get(RouteRepositoryInterface::class);
         $this->entityManager = static::getContainer()->get(EntityManagerInterface::class);
+        $this->idGenerator = static::getContainer()->get(IdGeneratorInterface::class);
 
         // Clean up database before each test
         $connection = $this->entityManager->getConnection();
@@ -34,6 +37,7 @@ class DoctrineRouteRepositoryTest extends KernelTestCase
     private function createRoute(string $from, string $to, string $code, float $distance, array $pathStrings): Route
     {
         return new Route(
+            $this->idGenerator->generate(),
             StationId::fromString($from),
             StationId::fromString($to),
             $code,

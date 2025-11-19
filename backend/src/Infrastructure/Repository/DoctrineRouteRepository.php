@@ -6,6 +6,7 @@ namespace App\Infrastructure\Repository;
 
 use App\Domain\Entity\Route;
 use App\Domain\Repository\RouteRepositoryInterface;
+use App\Infrastructure\Persistence\PeriodCalculator;
 use Doctrine\ORM\EntityManagerInterface;
 
 class DoctrineRouteRepository implements RouteRepositoryInterface
@@ -118,33 +119,12 @@ class DoctrineRouteRepository implements RouteRepositoryInterface
                 $data['group'] = $group;
 
                 // Calculate periodStart and periodEnd based on groupBy
-                [$periodStart, $periodEnd] = $this->calculatePeriodDates($group, $groupBy);
+                [$periodStart, $periodEnd] = PeriodCalculator::calculatePeriodDates($group, $groupBy);
                 $data['periodStart'] = $periodStart;
                 $data['periodEnd'] = $periodEnd;
             }
 
             return $data;
         }, $result);
-    }
-
-    /**
-     * Calculate periodStart and periodEnd dates based on the group value and groupBy type.
-     *
-     * @return array{0: string, 1: string}
-     */
-    private function calculatePeriodDates(string $group, string $groupBy): array
-    {
-        return match ($groupBy) {
-            'day' => [$group, $group],
-            'month' => [
-                $group . '-01',
-                date('Y-m-t', strtotime($group . '-01')),
-            ],
-            'year' => [
-                $group . '-01-01',
-                $group . '-12-31',
-            ],
-            default => ['', ''],
-        };
     }
 }
