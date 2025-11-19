@@ -9,7 +9,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_NAME: marjc5/defi-fullstack
 
 jobs:
   # ============ LINT ============
@@ -330,7 +330,7 @@ jobs:
       - name: Run Trivy on backend image
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:${{ github.sha }}
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:sha-${{ github.sha }}
           format: 'sarif'
           output: 'trivy-backend-results.sarif'
           severity: 'HIGH,CRITICAL'
@@ -339,14 +339,15 @@ jobs:
       - name: Run Trivy on frontend image
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:${{ github.sha }}
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:sha-${{ github.sha }}
           format: 'sarif'
           output: 'trivy-frontend-results.sarif'
           severity: 'HIGH,CRITICAL'
         continue-on-error: true
 
       - name: Upload Trivy scan results
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
         with:
           sarif_file: 'trivy-backend-results.sarif'
           category: 'trivy-backend'
@@ -386,13 +387,13 @@ jobs:
       - name: Tag and push release images
         run: |
           # Pull images by SHA
-          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:${{ github.sha }}
-          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:${{ github.sha }}
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:sha-${{ github.sha }}
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:sha-${{ github.sha }}
 
           # Tag with release version
-          docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:${{ github.sha }} \
+          docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:sha-${{ github.sha }} \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:${{ steps.tag.outputs.tag }}
-          docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:${{ github.sha }} \
+          docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:sha-${{ github.sha }} \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:${{ steps.tag.outputs.tag }}
 
           # Push release tags
@@ -401,9 +402,9 @@ jobs:
 
           # Also tag as latest for main branch
           if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-            docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:${{ github.sha }} \
+            docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:sha-${{ github.sha }} \
               ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:latest
-            docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:${{ github.sha }} \
+            docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:sha-${{ github.sha }} \
               ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:latest
             docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:latest
             docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:latest
