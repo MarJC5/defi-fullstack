@@ -11,13 +11,9 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
-<<<<<<< Updated upstream
     AppFooter: typeof import('./components/AppFooter.vue')['default']
     HealthCheck: typeof import('./components/HealthCheck.vue')['default']
     HelloWorld: typeof import('./components/HelloWorld.vue')['default']
-=======
-    HealthCheck: typeof import('./components/HealthCheck.vue')['default']
->>>>>>> Stashed changes
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
   }

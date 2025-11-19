@@ -17,9 +17,10 @@ install: certs ## Initial project setup (production)
 	@sed -i '' 's/APP_ENV=dev/APP_ENV=prod/' .env 2>/dev/null || sed -i 's/APP_ENV=dev/APP_ENV=prod/' .env
 	@sed -i '' 's/APP_ENV=dev/APP_ENV=prod/' backend/.env 2>/dev/null || sed -i 's/APP_ENV=dev/APP_ENV=prod/' backend/.env
 	docker compose --profile dev down --remove-orphans 2>/dev/null || true
+	rm -rf backend/vendor
 	docker compose --profile prod build
 	docker compose --profile prod up -d
-	docker compose exec backend sh -c "rm -rf vendor && composer install --no-dev --optimize-autoloader"
+	docker compose exec backend sh -c "composer clear-cache && composer install --no-dev --optimize-autoloader"
 	$(MAKE) db-migrate
 	@echo "${GREEN}Setup complete! Access https://localhost${RESET}"
 
@@ -30,9 +31,10 @@ install-dev: certs ## Development setup (hot reload)
 	@sed -i '' 's/APP_ENV=prod/APP_ENV=dev/' .env 2>/dev/null || sed -i 's/APP_ENV=prod/APP_ENV=dev/' .env
 	@sed -i '' 's/APP_ENV=prod/APP_ENV=dev/' backend/.env 2>/dev/null || sed -i 's/APP_ENV=prod/APP_ENV=dev/' backend/.env
 	docker compose --profile prod down --remove-orphans 2>/dev/null || true
+	rm -rf backend/vendor
 	docker compose --profile dev build
 	docker compose --profile dev up -d
-	docker compose exec backend sh -c "rm -rf vendor && composer install"
+	docker compose exec backend sh -c "composer clear-cache && composer install"
 	docker compose exec frontend npm install
 	$(MAKE) db-migrate
 	@echo "${GREEN}Dev setup complete! Access https://localhost${RESET}"
