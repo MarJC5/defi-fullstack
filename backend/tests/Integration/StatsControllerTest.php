@@ -149,6 +149,21 @@ class StatsControllerTest extends WebTestCase
     {
         $client = static::createClient();
 
+        // First create a route to have data
+        $client->request(
+            'POST',
+            '/api/v1/routes',
+            [],
+            [],
+            $this->getAuthHeaders(),
+            json_encode([
+                'fromStationId' => 'MX',
+                'toStationId' => 'CGE',
+                'analyticCode' => 'PERIOD-TEST',
+            ])
+        );
+        $this->assertResponseStatusCodeSame(201);
+
         $client->request(
             'GET',
             '/api/v1/stats/distances',
@@ -162,6 +177,105 @@ class StatsControllerTest extends WebTestCase
         $response = json_decode($client->getResponse()->getContent(), true);
 
         $this->assertEquals('month', $response['groupBy']);
+
+        // Check that items have periodStart and periodEnd when groupBy is used
+        $this->assertNotEmpty($response['items']);
+        foreach ($response['items'] as $item) {
+            $this->assertArrayHasKey('periodStart', $item, 'periodStart is required when groupBy is used');
+            $this->assertArrayHasKey('periodEnd', $item, 'periodEnd is required when groupBy is used');
+            $this->assertArrayHasKey('group', $item);
+        }
+    }
+
+    public function testGetDistancesWithGroupByDay(): void
+    {
+        $client = static::createClient();
+
+        // First create a route to have data
+        $client->request(
+            'POST',
+            '/api/v1/routes',
+            [],
+            [],
+            $this->getAuthHeaders(),
+            json_encode([
+                'fromStationId' => 'MX',
+                'toStationId' => 'CGE',
+                'analyticCode' => 'DAY-TEST',
+            ])
+        );
+        $this->assertResponseStatusCodeSame(201);
+
+        $client->request(
+            'GET',
+            '/api/v1/stats/distances',
+            ['groupBy' => 'day'],
+            [],
+            $this->getAuthHeaders()
+        );
+
+        $this->assertResponseStatusCodeSame(200);
+
+        $response = json_decode($client->getResponse()->getContent(), true);
+
+        $this->assertEquals('day', $response['groupBy']);
+        $this->assertNotEmpty($response['items']);
+
+        foreach ($response['items'] as $item) {
+            if ($item['analyticCode'] === 'DAY-TEST') {
+                $this->assertArrayHasKey('periodStart', $item);
+                $this->assertArrayHasKey('periodEnd', $item);
+                // For day groupBy, periodStart and periodEnd should be the same date
+                $this->assertEquals($item['periodStart'], $item['periodEnd']);
+                $this->assertEquals($item['group'], $item['periodStart']);
+            }
+        }
+    }
+
+    public function testGetDistancesWithGroupByYear(): void
+    {
+        $client = static::createClient();
+
+        // First create a route to have data
+        $client->request(
+            'POST',
+            '/api/v1/routes',
+            [],
+            [],
+            $this->getAuthHeaders(),
+            json_encode([
+                'fromStationId' => 'MX',
+                'toStationId' => 'CGE',
+                'analyticCode' => 'YEAR-TEST',
+            ])
+        );
+        $this->assertResponseStatusCodeSame(201);
+
+        $client->request(
+            'GET',
+            '/api/v1/stats/distances',
+            ['groupBy' => 'year'],
+            [],
+            $this->getAuthHeaders()
+        );
+
+        $this->assertResponseStatusCodeSame(200);
+
+        $response = json_decode($client->getResponse()->getContent(), true);
+
+        $this->assertEquals('year', $response['groupBy']);
+        $this->assertNotEmpty($response['items']);
+
+        foreach ($response['items'] as $item) {
+            if ($item['analyticCode'] === 'YEAR-TEST') {
+                $this->assertArrayHasKey('periodStart', $item);
+                $this->assertArrayHasKey('periodEnd', $item);
+                // For year groupBy, periodStart should be first day of year
+                $year = $item['group'];
+                $this->assertEquals("$year-01-01", $item['periodStart']);
+                $this->assertEquals("$year-12-31", $item['periodEnd']);
+            }
+        }
     }
 
     public function testGetDistancesWithInvalidGroupBy(): void
