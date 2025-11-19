@@ -22,7 +22,7 @@ class PeriodCalculator
             'day' => [$group, $group],
             'month' => [
                 $group . '-01',
-                date('Y-m-t', strtotime($group . '-01')),
+                date('Y-m-t', (int) strtotime($group . '-01')),
             ],
             'year' => [
                 $group . '-01-01',

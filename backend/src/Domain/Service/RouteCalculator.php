@@ -110,6 +110,7 @@ class RouteCalculator
         }
 
         // Convert to Value Objects
+        /** @var string[] $path */
         $pathStations = array_map(fn(string $s) => StationId::fromString($s), $path);
 
         return new Route(
