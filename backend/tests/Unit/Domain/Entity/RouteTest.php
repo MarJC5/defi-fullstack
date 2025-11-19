@@ -18,6 +18,7 @@ class RouteTest extends TestCase
         $distance = Distance::fromKilometers(5.5);
 
         $route = new Route(
+            'test-id-123',
             $fromStation,
             $toStation,
             'ANA-001',
@@ -25,7 +26,7 @@ class RouteTest extends TestCase
             [$fromStation, $toStation]
         );
 
-        $this->assertNotEmpty($route->getId());
+        $this->assertEquals('test-id-123', $route->getId());
         $this->assertTrue($route->getFromStationId()->equals($fromStation));
         $this->assertTrue($route->getToStationId()->equals($toStation));
         $this->assertEquals('ANA-001', $route->getAnalyticCode());
@@ -43,6 +44,7 @@ class RouteTest extends TestCase
         $distance = Distance::fromKilometers(10.0);
 
         $route = new Route(
+            'array-test-id',
             $fromStation,
             $toStation,
             'TEST-123',
@@ -52,7 +54,7 @@ class RouteTest extends TestCase
 
         $array = $route->toArray();
 
-        $this->assertNotEmpty($array['id']);
+        $this->assertEquals('array-test-id', $array['id']);
         $this->assertEquals('A', $array['fromStationId']);
         $this->assertEquals('B', $array['toStationId']);
         $this->assertEquals('TEST-123', $array['analyticCode']);
@@ -68,6 +70,7 @@ class RouteTest extends TestCase
         $distance = Distance::fromKilometers(2.5);
 
         $route = new Route(
+            'time-test-id',
             $fromStation,
             $toStation,
             'TIME-001',
@@ -91,6 +94,7 @@ class RouteTest extends TestCase
         $distance = Distance::fromKilometers(7.5);
 
         $route = new Route(
+            'dist-test-id',
             $fromStation,
             $toStation,
             'DIST-001',

@@ -13,7 +13,8 @@ use App\Domain\ValueObject\StationId;
 class RouteCalculator
 {
     public function __construct(
-        private array $graph
+        private array $graph,
+        private IdGeneratorInterface $idGenerator
     ) {
     }
 
@@ -32,6 +33,7 @@ class RouteCalculator
         if ($from === $to) {
             $station = StationId::fromString($from);
             return new Route(
+                $this->idGenerator->generate(),
                 $station,
                 $station,
                 $analyticCode,
@@ -111,6 +113,7 @@ class RouteCalculator
         $pathStations = array_map(fn(string $s) => StationId::fromString($s), $path);
 
         return new Route(
+            $this->idGenerator->generate(),
             StationId::fromString($from),
             StationId::fromString($to),
             $analyticCode,

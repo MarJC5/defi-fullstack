@@ -6,12 +6,14 @@ namespace App\Tests\Unit\Domain\Service;
 
 use App\Domain\Exception\NoRouteFoundException;
 use App\Domain\Exception\StationNotFoundException;
+use App\Domain\Service\IdGeneratorInterface;
 use App\Domain\Service\RouteCalculator;
 use PHPUnit\Framework\TestCase;
 
 class RouteCalculatorTest extends TestCase
 {
     private RouteCalculator $calculator;
+    private IdGeneratorInterface $idGenerator;
 
     protected function setUp(): void
     {
@@ -28,7 +30,11 @@ class RouteCalculatorTest extends TestCase
             'D' => ['B' => 1.5],
         ];
 
-        $this->calculator = new RouteCalculator($graph);
+        // Create a mock ID generator that returns predictable IDs
+        $this->idGenerator = $this->createMock(IdGeneratorInterface::class);
+        $this->idGenerator->method('generate')->willReturn('test-generated-id');
+
+        $this->calculator = new RouteCalculator($graph, $this->idGenerator);
     }
 
     public function testCalculateRouteForAdjacentStations(): void
@@ -89,7 +95,7 @@ class RouteCalculatorTest extends TestCase
             'C' => [], // Disconnected
         ];
 
-        $calculator = new RouteCalculator($graph);
+        $calculator = new RouteCalculator($graph, $this->idGenerator);
 
         $this->expectException(NoRouteFoundException::class);
 

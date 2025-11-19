@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<doctrine-mapping xmlns="http://doctrine-project.org/schemas/orm/doctrine-mapping"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  xsi:schemaLocation="http://doctrine-project.org/schemas/orm/doctrine-mapping
+                                      https://www.doctrine-project.org/schemas/orm/doctrine-mapping.xsd">
+
+    <entity name="App\Domain\Entity\Route" table="routes">
+        <indexes>
+            <index name="idx_routes_analytic_code" columns="analytic_code"/>
+            <index name="idx_routes_created_at" columns="created_at"/>
+        </indexes>
+
+        <id name="id" type="string" length="36"/>
+
+        <field name="fromStationId" column="from_station_id" type="station_id" length="10"/>
+        <field name="toStationId" column="to_station_id" type="station_id" length="10"/>
+        <field name="analyticCode" column="analytic_code" type="string" length="50"/>
+        <field name="distance" column="distance_km" type="distance"/>
+        <field name="path" type="station_id_array"/>
+        <field name="createdAt" column="created_at" type="datetime_immutable"/>
+    </entity>
+
+</doctrine-mapping>

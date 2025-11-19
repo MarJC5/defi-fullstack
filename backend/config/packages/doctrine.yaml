@@ -8,6 +8,10 @@ doctrine:
 
         profiling_collect_backtrace: '%kernel.debug%'
         use_savepoints: true
+        types:
+            station_id: App\Infrastructure\Persistence\Doctrine\Type\StationIdType
+            distance: App\Infrastructure\Persistence\Doctrine\Type\DistanceType
+            station_id_array: App\Infrastructure\Persistence\Doctrine\Type\StationIdArrayType
     orm:
         auto_generate_proxy_classes: true
         enable_lazy_ghost_objects: true
@@ -25,9 +29,9 @@ doctrine:
                 prefix: 'App\Entity'
                 alias: App
             Domain:
-                type: attribute
+                type: xml
                 is_bundle: false
-                dir: '%kernel.project_dir%/src/Domain/Entity'
+                dir: '%kernel.project_dir%/src/Infrastructure/Persistence/Doctrine/mapping'
                 prefix: 'App\Domain\Entity'
                 alias: Domain
         controller_resolver:

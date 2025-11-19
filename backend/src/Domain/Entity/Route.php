@@ -6,54 +6,43 @@ namespace App\Domain\Entity;
 
 use App\Domain\ValueObject\Distance;
 use App\Domain\ValueObject\StationId;
-use Doctrine\ORM\Mapping as ORM;
-use Symfony\Component\Uid\Uuid;
 
-#[ORM\Entity]
-#[ORM\Table(name: 'routes')]
-#[ORM\Index(columns: ['analytic_code'], name: 'idx_routes_analytic_code')]
-#[ORM\Index(columns: ['created_at'], name: 'idx_routes_created_at')]
+/**
+ * Route aggregate root - pure domain entity.
+ *
+ * Database mapping is handled separately in Infrastructure layer
+ * via XML mapping files (see src/Infrastructure/Persistence/Doctrine/mapping/).
+ */
 class Route
 {
-    #[ORM\Id]
-    #[ORM\Column(type: 'string', length: 36)]
     private string $id;
-
-    #[ORM\Column(name: 'from_station_id', type: 'string', length: 10)]
-    private string $fromStationId;
-
-    #[ORM\Column(name: 'to_station_id', type: 'string', length: 10)]
-    private string $toStationId;
-
-    #[ORM\Column(name: 'analytic_code', type: 'string', length: 50)]
+    private StationId $fromStationId;
+    private StationId $toStationId;
     private string $analyticCode;
-
-    #[ORM\Column(name: 'distance_km', type: 'float')]
-    private float $distanceKm;
-
-    #[ORM\Column(type: 'json')]
+    private Distance $distance;
+    /** @var StationId[] */
     private array $path;
-
-    #[ORM\Column(name: 'created_at', type: 'datetime_immutable')]
     private \DateTimeImmutable $createdAt;
 
     /**
      * @param StationId[] $path
      */
     public function __construct(
+        string $id,
         StationId $fromStationId,
         StationId $toStationId,
         string $analyticCode,
         Distance $distance,
-        array $path
+        array $path,
+        ?\DateTimeImmutable $createdAt = null
     ) {
-        $this->id = Uuid::v4()->toRfc4122();
-        $this->fromStationId = $fromStationId->value();
-        $this->toStationId = $toStationId->value();
+        $this->id = $id;
+        $this->fromStationId = $fromStationId;
+        $this->toStationId = $toStationId;
         $this->analyticCode = $analyticCode;
-        $this->distanceKm = $distance->kilometers();
-        $this->path = array_map(fn(StationId $s) => $s->value(), $path);
-        $this->createdAt = new \DateTimeImmutable();
+        $this->distance = $distance;
+        $this->path = $path;
+        $this->createdAt = $createdAt ?? new \DateTimeImmutable();
     }
 
     public function getId(): string
@@ -63,12 +52,12 @@ class Route
 
     public function getFromStationId(): StationId
     {
-        return StationId::fromString($this->fromStationId);
+        return $this->fromStationId;
     }
 
     public function getToStationId(): StationId
     {
-        return StationId::fromString($this->toStationId);
+        return $this->toStationId;
     }
 
     public function getAnalyticCode(): string
@@ -78,18 +67,26 @@ class Route
 
     public function getDistance(): Distance
     {
-        return Distance::fromKilometers($this->distanceKm);
+        return $this->distance;
     }
 
     public function getDistanceKm(): float
     {
-        return $this->distanceKm;
+        return $this->distance->kilometers();
     }
 
     /**
      * @return string[]
      */
     public function getPath(): array
+    {
+        return array_map(fn(StationId $s) => $s->value(), $this->path);
+    }
+
+    /**
+     * @return StationId[]
+     */
+    public function getPathStations(): array
     {
         return $this->path;
     }
@@ -106,11 +103,11 @@ class Route
     {
         return [
             'id' => $this->id,
-            'fromStationId' => $this->fromStationId,
-            'toStationId' => $this->toStationId,
+            'fromStationId' => $this->fromStationId->value(),
+            'toStationId' => $this->toStationId->value(),
             'analyticCode' => $this->analyticCode,
-            'distanceKm' => $this->distanceKm,
-            'path' => $this->path,
+            'distanceKm' => $this->distance->kilometers(),
+            'path' => $this->getPath(),
             'createdAt' => $this->createdAt->format('c'),
         ];
     }

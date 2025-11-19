@@ -21,8 +21,13 @@ services:
     App\Domain\Repository\RouteRepositoryInterface:
         class: App\Infrastructure\Repository\DoctrineRouteRepository
 
-    # Handler with explicit configuration for file path
-    App\Application\Handler\CalculateRouteHandler:
+    # ID Generator interface binding
+    App\Domain\Service\IdGeneratorInterface:
+        class: App\Infrastructure\Service\UuidGenerator
+
+    # Distances Data Provider interface binding
+    App\Domain\Service\DistancesDataProviderInterface:
+        class: App\Infrastructure\Service\JsonDistancesDataProvider
         arguments:
             $distancesPath: '%app.distances_path%'
 
