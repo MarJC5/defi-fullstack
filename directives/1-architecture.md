@@ -12,23 +12,27 @@ defi-fullstack/
 │   │   │   └── lexik_jwt_authentication.yaml
 │   │   ├── routes.yaml
 │   │   └── services.yaml
-│   ├── data/                     # Static reference data
-│   │   ├── stations.json
-│   │   └── distances.json
 │   ├── migrations/               # Doctrine migrations
 │   ├── src/
-│   │   ├── Domain/               # DDD - Business logic
+│   │   ├── Domain/               # DDD - Pure business logic (NO framework deps)
 │   │   │   ├── Entity/
 │   │   │   ├── ValueObject/
 │   │   │   ├── Repository/       # Interfaces only
-│   │   │   ├── Service/
+│   │   │   ├── Service/          # Domain services + interfaces
 │   │   │   └── Exception/
 │   │   ├── Application/          # Use cases / Commands / Queries
 │   │   │   ├── Command/
 │   │   │   ├── Query/
 │   │   │   └── Handler/
+│   │   ├── Infrastructure/       # External concerns
+│   │   │   ├── Repository/       # Doctrine implementations
+│   │   │   ├── Service/          # UuidGenerator, JsonDistancesDataProvider
+│   │   │   ├── Exception/        # DataProviderException
+│   │   │   └── Persistence/      # Doctrine types & XML mapping
+│   │   │       └── Doctrine/
+│   │   │           ├── Type/     # Custom types for Value Objects
+│   │   │           └── mapping/  # XML ORM mapping
 │   │   ├── Controller/           # Symfony controllers
-│   │   ├── Repository/           # Doctrine implementations
 │   │   └── Security/             # JWT authenticator
 │   ├── tests/
 │   │   ├── Unit/
@@ -64,6 +68,12 @@ defi-fullstack/
 │   ├── nginx.conf
 │   └── certs/                    # SSL certificates (gitignored)
 │       └── .gitkeep
+├── data/                         # Static reference data (shared)
+│   ├── stations.json
+│   └── distances.json
+├── docker/                       # Docker init scripts
+│   └── postgres/
+│       └── init-test-db.sh       # Creates test database
 ├── docs/                         # API documentation
 │   ├── openapi.yml
 │   └── .spectral.yml
@@ -150,31 +160,39 @@ Architecture that puts **business logic at the center**, isolated from technical
 ### Layers
 
 #### 1. Domain Layer (Core)
-Pure business logic. No framework dependencies.
+Pure business logic. **NO framework dependencies** (no Doctrine ORM, no Symfony).
 
 ```php
-// Entity - Has identity
+// Entity - Has identity, uses Value Objects
+// NOTE: No Doctrine attributes! Mapping is via XML in Infrastructure
 class Route
 {
     private string $id;
-    private string $fromStationId;
-    private string $toStationId;
+    private StationId $fromStationId;      // Value Object, not primitive
+    private StationId $toStationId;        // Value Object, not primitive
     private string $analyticCode;
-    private float $distanceKm;
-    private array $path;
+    private Distance $distance;             // Value Object, not float
+    /** @var StationId[] */
+    private array $path;                    // Array of Value Objects
     private DateTimeImmutable $createdAt;
 }
 
-// Value Object - No identity, immutable
-class StationId
+// Value Object - No identity, immutable, with behavior
+class Distance
 {
-    public function __construct(
-        private readonly string $shortName
-    ) {
-        if (empty($shortName)) {
-            throw new InvalidArgumentException('Station ID cannot be empty');
+    private function __construct(private readonly float $kilometers) {}
+
+    public static function fromKilometers(float $km): self
+    {
+        if ($km < 0) {
+            throw new InvalidDistanceException("Distance cannot be negative");
         }
+        return new self($km);
     }
+
+    public function add(self $other): self { return new self($this->kilometers + $other->kilometers); }
+    public function isZero(): bool { return $this->kilometers === 0.0; }
+    public function value(): float { return $this->kilometers; }
 }
 
 // Repository Interface
@@ -184,14 +202,26 @@ interface RouteRepositoryInterface
     public function findByAnalyticCode(string $code): array;
 }
 
+// Service Interfaces (implementations in Infrastructure)
+interface IdGeneratorInterface
+{
+    public function generate(): string;
+}
+
+interface DistancesDataProviderInterface
+{
+    public function getDistancesData(): array;
+}
+
 // Domain Service - Business logic
 class RouteCalculator
 {
-    public function calculate(
-        StationId $from,
-        StationId $to,
-        string $analyticCode
-    ): Route;
+    public function __construct(
+        private array $graph,
+        private IdGeneratorInterface $idGenerator  // Depends on abstraction
+    ) {}
+
+    public function calculate(string $from, string $to, string $analyticCode): Route;
 }
 ```
 
@@ -209,19 +239,25 @@ class CalculateRouteCommand
     ) {}
 }
 
-// Handler
+// Handler - Depends on abstractions only
 class CalculateRouteHandler
 {
     public function __construct(
-        private RouteCalculator $calculator,
-        private RouteRepositoryInterface $repository
-    ) {}
+        private GraphBuilder $graphBuilder,
+        private RouteRepositoryInterface $repository,
+        private IdGeneratorInterface $idGenerator,
+        private DistancesDataProviderInterface $distancesDataProvider
+    ) {
+        // Build graph from data provider abstraction
+        $graph = $this->graphBuilder->build($this->distancesDataProvider->getDistancesData());
+        $this->calculator = new RouteCalculator($graph, $this->idGenerator);
+    }
 
     public function handle(CalculateRouteCommand $command): Route
     {
         $route = $this->calculator->calculate(
-            new StationId($command->fromStationId),
-            new StationId($command->toStationId),
+            $command->fromStationId,
+            $command->toStationId,
             $command->analyticCode
         );
 
@@ -233,34 +269,60 @@ class CalculateRouteHandler
 ```
 
 #### 3. Infrastructure Layer
-External concerns: database, HTTP, filesystem.
+External concerns: database, HTTP, filesystem. Implements domain interfaces.
 
 ```php
-// Repository Implementation
-class PostgresRouteRepository implements RouteRepositoryInterface
+// Repository Implementation (uses Doctrine)
+class DoctrineRouteRepository implements RouteRepositoryInterface
 {
+    public function __construct(private EntityManagerInterface $entityManager) {}
+
     public function save(Route $route): void
     {
-        // SQL insert
+        $this->entityManager->persist($route);
+        $this->entityManager->flush();
     }
 }
 
-// Controller
-class RouteController
+// Service Implementations
+class UuidGenerator implements IdGeneratorInterface
 {
-    public function create(Request $request): Response
+    public function generate(): string
     {
-        $command = new CalculateRouteCommand(
-            $request->get('fromStationId'),
-            $request->get('toStationId'),
-            $request->get('analyticCode')
-        );
-
-        $route = $this->handler->handle($command);
-
-        return new JsonResponse($route, 201);
+        return Uuid::v4()->toRfc4122();
     }
 }
+
+class JsonDistancesDataProvider implements DistancesDataProviderInterface
+{
+    public function __construct(private string $distancesPath) {}
+
+    public function getDistancesData(): array
+    {
+        $json = file_get_contents($this->distancesPath);
+        if ($json === false) {
+            throw DataProviderException::cannotReadFile($this->distancesPath);
+        }
+        return json_decode($json, true);
+    }
+}
+
+// Custom Doctrine Types for Value Objects
+class StationIdType extends StringType
+{
+    public function convertToPHPValue($value, $platform): ?StationId
+    {
+        return $value ? StationId::fromString($value) : null;
+    }
+
+    public function convertToDatabaseValue($value, $platform): ?string
+    {
+        return $value instanceof StationId ? $value->value() : $value;
+    }
+}
+
+// XML ORM Mapping (in Infrastructure/Persistence/Doctrine/mapping/Route.orm.xml)
+// Keeps Domain entity free of Doctrine attributes
 ```
 
 ### Why DDD for this project?

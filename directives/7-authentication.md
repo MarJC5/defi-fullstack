@@ -102,24 +102,64 @@ export const api = axios.create({
 })
 ```
 
+### Auth Service
+
+```typescript
+// src/services/auth.ts
+import { api } from '@/services/api';
+
+export interface LoginCredentials {
+  username: string;
+  password: string;
+}
+
+export interface LoginResponse {
+  message: string;
+}
+
+export const authService = {
+  async login(credentials: LoginCredentials): Promise<LoginResponse> {
+    return api.post('/auth/login', credentials) as Promise<LoginResponse>;
+  },
+
+  async logout(): Promise<void> {
+    await api.post('/auth/logout');
+  },
+};
+```
+
 ### Auth Composable
 
 ```typescript
 // src/composables/useAuth.ts
-export function useAuth() {
-  const isAuthenticated = ref(false)
+import { ref } from 'vue';
+import { authService, type LoginCredentials } from '@/services/auth';
 
-  const login = async (credentials) => {
-    await authService.login(credentials)
-    isAuthenticated.value = true
-  }
+export function useAuth() {
+  const isAuthenticated = ref(false);
+  const loading = ref(false);
+  const error = ref<string | null>(null);
+
+  const login = async (credentials: LoginCredentials) => {
+    loading.value = true;
+    error.value = null;
+    try {
+      await authService.login(credentials);
+      isAuthenticated.value = true;
+    } catch (e: any) {
+      error.value = e.message || 'Login failed';
+      throw e;
+    } finally {
+      loading.value = false;
+    }
+  };
 
   const logout = async () => {
-    await authService.logout()
-    isAuthenticated.value = false
-  }
+    await authService.logout();
+    isAuthenticated.value = false;
+  };
 
-  return { isAuthenticated, login, logout }
+  return { isAuthenticated, loading, error, login, logout };
 }
 ```
 

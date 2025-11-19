@@ -56,82 +56,190 @@ COMMENT ON COLUMN routes.path IS 'Ordered array of station IDs';
 
 ---
 
-## Doctrine Entity
+## Domain Entity (Pure PHP - No Doctrine)
+
+The Domain entity uses Value Objects and has **NO Doctrine attributes** - mapping is done via XML in Infrastructure layer.
 
 ```php
 // src/Domain/Entity/Route.php
 namespace App\Domain\Entity;
 
-use Doctrine\ORM\Mapping as ORM;
-use App\Repository\DoctrineRouteRepository;
+use App\Domain\ValueObject\StationId;
+use App\Domain\ValueObject\Distance;
 
-#[ORM\Entity(repositoryClass: DoctrineRouteRepository::class)]
-#[ORM\Table(name: 'routes')]
-#[ORM\Index(columns: ['analytic_code'], name: 'idx_routes_analytic_code')]
-#[ORM\Index(columns: ['created_at'], name: 'idx_routes_created_at')]
-#[ORM\Index(columns: ['analytic_code', 'created_at'], name: 'idx_routes_analytic_created')]
+// NOTE: No Doctrine ORM attributes! Mapping is via XML in Infrastructure layer
 class Route
 {
-    #[ORM\Id]
-    #[ORM\Column(type: 'guid')]
     private string $id;
-
-    #[ORM\Column(name: 'from_station_id', type: 'string', length: 10)]
-    private string $fromStationId;
-
-    #[ORM\Column(name: 'to_station_id', type: 'string', length: 10)]
-    private string $toStationId;
-
-    #[ORM\Column(name: 'analytic_code', type: 'string', length: 50)]
+    private StationId $fromStationId;      // Value Object
+    private StationId $toStationId;        // Value Object
     private string $analyticCode;
-
-    #[ORM\Column(name: 'distance_km', type: 'decimal', precision: 10, scale: 2)]
-    private float $distanceKm;
-
-    #[ORM\Column(type: 'json')]
-    private array $path;
-
-    #[ORM\Column(name: 'created_at', type: 'datetime_immutable')]
+    private Distance $distance;             // Value Object
+    /** @var StationId[] */
+    private array $path;                    // Array of Value Objects
     private \DateTimeImmutable $createdAt;
 
     public function __construct(
         string $id,
-        string $fromStationId,
-        string $toStationId,
+        StationId $fromStationId,
+        StationId $toStationId,
         string $analyticCode,
-        float $distanceKm,
+        Distance $distance,
         array $path,
-        \DateTimeImmutable $createdAt
+        ?\DateTimeImmutable $createdAt = null
     ) {
         $this->id = $id;
         $this->fromStationId = $fromStationId;
         $this->toStationId = $toStationId;
         $this->analyticCode = $analyticCode;
-        $this->distanceKm = $distanceKm;
+        $this->distance = $distance;
         $this->path = $path;
-        $this->createdAt = $createdAt;
+        $this->createdAt = $createdAt ?? new \DateTimeImmutable();
     }
 
-    // Getters
+    // Getters return Value Objects
     public function getId(): string { return $this->id; }
-    public function getFromStationId(): string { return $this->fromStationId; }
-    public function getToStationId(): string { return $this->toStationId; }
+    public function getFromStationId(): StationId { return $this->fromStationId; }
+    public function getToStationId(): StationId { return $this->toStationId; }
     public function getAnalyticCode(): string { return $this->analyticCode; }
-    public function getDistanceKm(): float { return $this->distanceKm; }
-    public function getPath(): array { return $this->path; }
+    public function getDistance(): Distance { return $this->distance; }
+    public function getDistanceKm(): float { return $this->distance->value(); }
     public function getCreatedAt(): \DateTimeImmutable { return $this->createdAt; }
+
+    /** @return string[] Station IDs as strings */
+    public function getPath(): array
+    {
+        return array_map(fn(StationId $s) => $s->value(), $this->path);
+    }
 
     public function toArray(): array
     {
         return [
             'id' => $this->id,
-            'fromStationId' => $this->fromStationId,
-            'toStationId' => $this->toStationId,
+            'fromStationId' => $this->fromStationId->value(),
+            'toStationId' => $this->toStationId->value(),
             'analyticCode' => $this->analyticCode,
-            'distanceKm' => (float) $this->distanceKm,
-            'path' => $this->path,
+            'distanceKm' => $this->distance->value(),
+            'path' => $this->getPath(),
             'createdAt' => $this->createdAt->format('c'),
         ];
+    }
+}
+```
+
+---
+
+## XML ORM Mapping (Infrastructure Layer)
+
+Mapping is separated from the Domain entity to keep it framework-agnostic.
+
+```xml
+<!-- src/Infrastructure/Persistence/Doctrine/mapping/Route.orm.xml -->
+<?xml version="1.0" encoding="UTF-8"?>
+<doctrine-mapping xmlns="http://doctrine-project.org/schemas/orm/doctrine-mapping">
+    <entity name="App\Domain\Entity\Route" table="routes">
+        <id name="id" type="string" length="36"/>
+
+        <!-- Custom types for Value Objects -->
+        <field name="fromStationId" column="from_station_id" type="station_id" length="10"/>
+        <field name="toStationId" column="to_station_id" type="station_id" length="10"/>
+        <field name="analyticCode" column="analytic_code" type="string" length="50"/>
+        <field name="distance" column="distance_km" type="distance"/>
+        <field name="path" type="station_id_array"/>
+        <field name="createdAt" column="created_at" type="datetime_immutable"/>
+
+        <indexes>
+            <index name="idx_routes_analytic_code" columns="analytic_code"/>
+            <index name="idx_routes_created_at" columns="created_at"/>
+            <index name="idx_routes_analytic_created" columns="analytic_code,created_at"/>
+        </indexes>
+    </entity>
+</doctrine-mapping>
+```
+
+---
+
+## Custom Doctrine Types for Value Objects
+
+Custom types handle conversion between database primitives and domain Value Objects transparently.
+
+```php
+// src/Infrastructure/Persistence/Doctrine/Type/StationIdType.php
+namespace App\Infrastructure\Persistence\Doctrine\Type;
+
+use App\Domain\ValueObject\StationId;
+use Doctrine\DBAL\Platforms\AbstractPlatform;
+use Doctrine\DBAL\Types\StringType;
+
+class StationIdType extends StringType
+{
+    public const NAME = 'station_id';
+
+    public function convertToPHPValue($value, AbstractPlatform $platform): ?StationId
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+        return StationId::fromString($value);
+    }
+
+    public function convertToDatabaseValue($value, AbstractPlatform $platform): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+        return $value instanceof StationId ? $value->value() : $value;
+    }
+
+    public function getName(): string
+    {
+        return self::NAME;
+    }
+}
+
+// src/Infrastructure/Persistence/Doctrine/Type/DistanceType.php
+class DistanceType extends Type
+{
+    public const NAME = 'distance';
+
+    public function convertToPHPValue($value, AbstractPlatform $platform): ?Distance
+    {
+        if ($value === null) {
+            return null;
+        }
+        return Distance::fromKilometers((float) $value);
+    }
+
+    public function convertToDatabaseValue($value, AbstractPlatform $platform): ?float
+    {
+        if ($value === null) {
+            return null;
+        }
+        return $value instanceof Distance ? $value->value() : (float) $value;
+    }
+}
+
+// src/Infrastructure/Persistence/Doctrine/Type/StationIdArrayType.php
+class StationIdArrayType extends JsonType
+{
+    public const NAME = 'station_id_array';
+
+    public function convertToPHPValue($value, AbstractPlatform $platform): array
+    {
+        $array = parent::convertToPHPValue($value, $platform);
+        return array_map(fn($id) => StationId::fromString($id), $array ?? []);
+    }
+
+    public function convertToDatabaseValue($value, AbstractPlatform $platform): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+        $primitives = array_map(
+            fn($item) => $item instanceof StationId ? $item->value() : $item,
+            $value
+        );
+        return parent::convertToDatabaseValue($primitives, $platform);
     }
 }
 ```
@@ -148,17 +256,24 @@ doctrine:
         url: '%env(resolve:DATABASE_URL)%'
         driver: 'pdo_pgsql'
         charset: utf8
+        # Register custom types for Value Objects
+        types:
+            station_id: App\Infrastructure\Persistence\Doctrine\Type\StationIdType
+            distance: App\Infrastructure\Persistence\Doctrine\Type\DistanceType
+            station_id_array: App\Infrastructure\Persistence\Doctrine\Type\StationIdArrayType
 
     orm:
         auto_generate_proxy_classes: true
         naming_strategy: doctrine.orm.naming_strategy.underscore_number_aware
         auto_mapping: true
         mappings:
-            App:
+            # Use XML mapping from Infrastructure layer
+            Domain:
+                type: xml
                 is_bundle: false
-                dir: '%kernel.project_dir%/src/Domain/Entity'
+                dir: '%kernel.project_dir%/src/Infrastructure/Persistence/Doctrine/mapping'
                 prefix: 'App\Domain\Entity'
-                alias: App
+                alias: Domain
 ```
 
 ### .env
@@ -293,37 +408,19 @@ services:
 
 ### Data Files Location
 
+Data files are at the **project root** (shared between backend and frontend):
+
 ```
-backend/
+defi-fullstack/
 ├── data/
-│   ├── stations.json      # Copy from project root
-│   └── distances.json     # Copy from project root
+│   ├── stations.json
+│   └── distances.json
 ```
 
-### API Endpoint for Stations (Optional)
-
-```php
-// src/Controller/StationController.php
-namespace App\Controller;
-
-use App\Domain\Service\StationLoader;
-use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
-use Symfony\Component\HttpFoundation\JsonResponse;
-use Symfony\Component\Routing\Attribute\Route;
-
-#[Route('/api/v1')]
-class StationController extends AbstractController
-{
-    public function __construct(
-        private StationLoader $stationLoader
-    ) {}
-
-    #[Route('/stations', name: 'list_stations', methods: ['GET'])]
-    public function list(): JsonResponse
-    {
-        return $this->json($this->stationLoader->getStations());
-    }
-}
+In Docker, this is mounted to `/data`:
+```yaml
+volumes:
+  - ./data:/data:ro
 ```
 
 ---

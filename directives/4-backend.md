@@ -20,12 +20,13 @@
 backend/
 ├── config/
 │   ├── packages/
+│   │   └── doctrine.yaml         # Custom types registration
 │   ├── routes.yaml
-│   └── services.yaml
+│   └── services.yaml             # Interface bindings
 ├── src/
-│   ├── Domain/
+│   ├── Domain/                   # NO framework dependencies!
 │   │   ├── Entity/
-│   │   │   └── Route.php
+│   │   │   └── Route.php         # Pure PHP, no Doctrine attributes
 │   │   ├── ValueObject/
 │   │   │   ├── StationId.php
 │   │   │   └── Distance.php
@@ -33,10 +34,14 @@ backend/
 │   │   │   └── RouteRepositoryInterface.php
 │   │   ├── Service/
 │   │   │   ├── GraphBuilder.php
-│   │   │   └── RouteCalculator.php
+│   │   │   ├── RouteCalculator.php
+│   │   │   ├── IdGeneratorInterface.php
+│   │   │   └── DistancesDataProviderInterface.php
 │   │   └── Exception/
 │   │       ├── StationNotFoundException.php
-│   │       └── NoRouteFoundException.php
+│   │       ├── NoRouteFoundException.php
+│   │       ├── InvalidStationIdException.php
+│   │       └── InvalidDistanceException.php
 │   ├── Application/
 │   │   ├── Command/
 │   │   │   └── CalculateRouteCommand.php
@@ -45,13 +50,30 @@ backend/
 │   │   └── Handler/
 │   │       ├── CalculateRouteHandler.php
 │   │       └── GetAnalyticDistancesHandler.php
+│   ├── Infrastructure/
+│   │   ├── Repository/
+│   │   │   ├── DoctrineRouteRepository.php
+│   │   │   └── InMemoryRouteRepository.php
+│   │   ├── Service/
+│   │   │   ├── UuidGenerator.php
+│   │   │   └── JsonDistancesDataProvider.php
+│   │   ├── Exception/
+│   │   │   └── DataProviderException.php
+│   │   └── Persistence/
+│   │       └── Doctrine/
+│   │           ├── Type/         # Custom types for Value Objects
+│   │           │   ├── StationIdType.php
+│   │           │   ├── DistanceType.php
+│   │           │   └── StationIdArrayType.php
+│   │           └── mapping/
+│   │               └── Route.orm.xml
 │   ├── Controller/
 │   │   ├── RouteController.php
-│   │   └── StatsController.php
-│   ├── Security/
-│   │   └── JwtAuthenticator.php
-│   └── Repository/
-│       └── DoctrineRouteRepository.php
+│   │   ├── StatsController.php
+│   │   ├── HealthController.php
+│   │   └── AuthController.php
+│   └── Security/
+│       └── JwtAuthenticator.php
 ├── tests/
 │   ├── Unit/
 │   │   ├── Domain/
@@ -317,35 +339,47 @@ class RouteCalculator
 // src/Domain/Entity/Route.php
 namespace App\Domain\Entity;
 
+use App\Domain\ValueObject\StationId;
+use App\Domain\ValueObject\Distance;
+
+// NOTE: No Doctrine ORM attributes! Mapping is via XML in Infrastructure layer
 class Route
 {
     public function __construct(
-        private readonly string $id,
-        private readonly string $fromStationId,
-        private readonly string $toStationId,
-        private readonly string $analyticCode,
-        private readonly float $distanceKm,
-        private readonly array $path,
-        private readonly \DateTimeImmutable $createdAt
-    ) {}
+        private string $id,
+        private StationId $fromStationId,      // Value Object
+        private StationId $toStationId,        // Value Object
+        private string $analyticCode,
+        private Distance $distance,             // Value Object
+        /** @var StationId[] */
+        private array $path,                    // Array of Value Objects
+        private ?\DateTimeImmutable $createdAt = null
+    ) {
+        $this->createdAt = $createdAt ?? new \DateTimeImmutable();
+    }
 
     public function getId(): string { return $this->id; }
-    public function getFromStationId(): string { return $this->fromStationId; }
-    public function getToStationId(): string { return $this->toStationId; }
+    public function getFromStationId(): StationId { return $this->fromStationId; }
+    public function getToStationId(): StationId { return $this->toStationId; }
     public function getAnalyticCode(): string { return $this->analyticCode; }
-    public function getDistanceKm(): float { return $this->distanceKm; }
-    public function getPath(): array { return $this->path; }
-    public function getCreatedAt(): \DateTimeImmutable { return $this->createdAt; }
+    public function getDistance(): Distance { return $this->distance; }
+    public function getDistanceKm(): float { return $this->distance->value(); }
+
+    /** @return string[] Station IDs as strings for API response */
+    public function getPath(): array
+    {
+        return array_map(fn(StationId $s) => $s->value(), $this->path);
+    }
 
     public function toArray(): array
     {
         return [
             'id' => $this->id,
-            'fromStationId' => $this->fromStationId,
-            'toStationId' => $this->toStationId,
+            'fromStationId' => $this->fromStationId->value(),
+            'toStationId' => $this->toStationId->value(),
             'analyticCode' => $this->analyticCode,
-            'distanceKm' => $this->distanceKm,
-            'path' => $this->path,
+            'distanceKm' => $this->distance->value(),
+            'path' => $this->getPath(),
             'createdAt' => $this->createdAt->format('c'),
         ];
     }
@@ -420,14 +454,25 @@ namespace App\Application\Handler;
 use App\Application\Command\CalculateRouteCommand;
 use App\Domain\Entity\Route;
 use App\Domain\Service\RouteCalculator;
+use App\Domain\Service\GraphBuilder;
 use App\Domain\Repository\RouteRepositoryInterface;
+use App\Domain\Service\IdGeneratorInterface;
+use App\Domain\Service\DistancesDataProviderInterface;
 
 class CalculateRouteHandler
 {
+    private RouteCalculator $calculator;
+
     public function __construct(
-        private RouteCalculator $calculator,
-        private RouteRepositoryInterface $repository
-    ) {}
+        private readonly GraphBuilder $graphBuilder,
+        private readonly RouteRepositoryInterface $repository,
+        private readonly IdGeneratorInterface $idGenerator,
+        private readonly DistancesDataProviderInterface $distancesDataProvider
+    ) {
+        // Build graph from data provider (abstraction, not file path)
+        $graph = $this->graphBuilder->build($this->distancesDataProvider->getDistancesData());
+        $this->calculator = new RouteCalculator($graph, $this->idGenerator);
+    }
 
     public function handle(CalculateRouteCommand $command): Route
     {
@@ -638,131 +683,15 @@ class GraphBuilder
 
 ---
 
-## JWT Authentication (LexikJWTAuthenticationBundle)
+## JWT Authentication
 
-### Configuration
+For complete JWT authentication implementation details, see [7-authentication.md](7-authentication.md).
 
-```yaml
-# config/packages/lexik_jwt_authentication.yaml
-lexik_jwt_authentication:
-    secret_key: '%env(resolve:JWT_SECRET_KEY)%'
-    public_key: '%env(resolve:JWT_PUBLIC_KEY)%'
-    pass_phrase: '%env(JWT_PASSPHRASE)%'
-    token_ttl: 3600
-    token_extractors:
-        # For Swagger/API clients
-        authorization_header:
-            enabled: true
-            prefix: Bearer
-            name: Authorization
-        # For frontend (httpOnly cookie)
-        cookie:
-            enabled: true
-            name: jwt_token
-
-# config/packages/security.yaml
-security:
-    providers:
-        users_in_memory:
-            memory:
-                users:
-                    '%env(API_USER_NAME)%':
-                        password: '%env(API_USER_PASSWORD_HASH)%'
-                        roles: ['ROLE_API']
-    firewalls:
-        api:
-            pattern: ^/api
-            stateless: true
-            jwt: ~
-
-    access_control:
-        - { path: ^/api/doc, roles: PUBLIC_ACCESS }
-        - { path: ^/api/v1/health, roles: PUBLIC_ACCESS }
-        - { path: ^/api/v1/auth/login$, roles: PUBLIC_ACCESS }
-        - { path: ^/api/v1/auth/logout$, roles: PUBLIC_ACCESS }
-        - { path: ^/api, roles: IS_AUTHENTICATED_FULLY }
-```
-
-### Auth Controller (Login/Logout with httpOnly cookies)
-
-```php
-// src/Controller/AuthController.php
-#[Route('/api/v1/auth')]
-class AuthController extends AbstractController
-{
-    #[Route('/login', methods: ['POST'])]
-    public function login(Request $request): JsonResponse
-    {
-        $data = json_decode($request->getContent(), true);
-        $user = $this->userProvider->loadUserByIdentifier($data['username']);
-
-        if (!$this->passwordHasher->isPasswordValid($user, $data['password'])) {
-            return new JsonResponse(['error' => 'Invalid credentials'], 401);
-        }
-
-        $token = $this->jwtManager->create($user);
-
-        $response = new JsonResponse(['message' => 'Login successful']);
-        $cookie = Cookie::create('jwt_token')
-            ->withValue($token)
-            ->withExpires(time() + 3600)
-            ->withSecure(true)
-            ->withHttpOnly(true)
-            ->withSameSite('lax');
-
-        $response->headers->setCookie($cookie);
-        return $response;
-    }
-
-    #[Route('/logout', methods: ['POST'])]
-    public function logout(): JsonResponse
-    {
-        $response = new JsonResponse(['message' => 'Logout successful']);
-        $cookie = Cookie::create('jwt_token')
-            ->withValue('')
-            ->withExpires(1)
-            ->withHttpOnly(true);
-
-        $response->headers->setCookie($cookie);
-        return $response;
-    }
-}
-```
-
-> **Note**: See [7-authentication.md](7-authentication.md) for complete auth documentation.
-
-### Generate JWT Keys
-
-```bash
-# Generate keys
-php bin/console lexik:jwt:generate-keypair
-
-# Or manually
-openssl genpkey -out config/jwt/private.pem -aes256 -algorithm rsa -pkeyopt rsa_keygen_bits:4096
-openssl pkey -in config/jwt/private.pem -out config/jwt/public.pem -pubout
-```
-
-### .env
-
-```bash
-JWT_SECRET_KEY=%kernel.project_dir%/config/jwt/private.pem
-JWT_PUBLIC_KEY=%kernel.project_dir%/config/jwt/public.pem
-JWT_PASSPHRASE=your-passphrase
-```
-
-### Custom Authenticator (Optional)
-
-```php
-// src/Security/JwtAuthenticator.php
-namespace App\Security;
-
-use Lexik\Bundle\JWTAuthenticationBundle\Security\Authenticator\JWTAuthenticator;
-
-class JwtAuthenticator extends JWTAuthenticator
-{
-    // Override methods if custom behavior needed
-}
-```
+Key points:
+- Uses LexikJWTAuthenticationBundle
+- httpOnly cookies for frontend (prevents XSS)
+- Bearer token for Swagger/API clients
+- Single-user pattern with bcrypt password hashing
 
 ---
 

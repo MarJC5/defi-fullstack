@@ -87,9 +87,16 @@ services:
       - JWT_PASSPHRASE=${JWT_PASSPHRASE}
     volumes:
       - ./backend:/var/www/html
+      - ./data:/data:ro                    # Shared data directory
     depends_on:
       db:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep php-fpm || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     restart: unless-stopped
 
   # Vue Frontend - Development (hot reload)
@@ -104,6 +111,7 @@ services:
       - VITE_API_URL=/api/v1
     volumes:
       - ./frontend:/app
+      - ./data:/data:ro                    # Shared data directory
     restart: unless-stopped
 
   # Vue Frontend - Production (build static files)
@@ -116,6 +124,7 @@ services:
       target: build
     volumes:
       - frontend_dist:/app/dist
+      - ./data:/data:ro                    # Shared data directory
 
   # Database
   db:
@@ -127,6 +136,7 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres:/docker-entrypoint-initdb.d:ro  # Init scripts (creates test DB)
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s

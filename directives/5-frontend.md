@@ -32,39 +32,45 @@ frontend/
 │   ├── assets/
 │   ├── components/
 │   │   ├── AppFooter.vue
+│   │   ├── HealthCheck.vue     # Health status indicator
 │   │   ├── LoginForm.vue
 │   │   ├── RouteForm.vue
 │   │   ├── RouteResult.vue
-│   │   └── StationSelect.vue
+│   │   └── StatsChart.vue      # Stats visualization (bonus)
 │   ├── layouts/
 │   │   └── default.vue
 │   ├── pages/              # File-based routing
-│   │   ├── index.vue       # Home page
-│   │   └── stats.vue       # Stats page
+│   │   └── index.vue       # Home page (includes stats toggle)
 │   ├── plugins/
 │   │   ├── index.ts
 │   │   └── vuetify.ts
 │   ├── router/
+│   │   └── index.ts
 │   ├── composables/
 │   │   ├── useAuth.ts
-│   │   └── useRoutes.ts
+│   │   ├── useRoutes.ts
+│   │   └── useStats.ts         # Stats data composable
 │   ├── services/
 │   │   ├── api.ts
 │   │   ├── auth.ts
-│   │   └── route.ts
+│   │   ├── route.ts
+│   │   └── stats.ts            # Stats API service
 │   ├── stores/
+│   │   ├── index.ts
 │   │   └── app.ts
-│   ├── styles/
-│   │   └── settings.scss
+│   ├── types/
+│   │   └── api.ts
 │   ├── App.vue
 │   └── main.ts
 ├── tests/
 │   ├── unit/
 │   │   ├── components/
 │   │   │   ├── RouteForm.spec.ts
-│   │   │   └── StationSelect.spec.ts
+│   │   │   └── StatsChart.spec.ts
+│   │   ├── composables/
+│   │   │   └── useStats.spec.ts
 │   │   └── services/
-│   │       └── routeService.spec.ts
+│   │       └── route.spec.ts
 │   └── setup.ts
 ├── public/
 ├── index.html
@@ -346,36 +352,30 @@ const handleSubmit = () => {
 
 ## Services with TDD
 
-### API Service (httpOnly Cookie Auth)
-
-The API service uses httpOnly cookies for JWT authentication. The browser automatically includes the cookie with each request - no manual token management needed.
+### API Service
 
 ```typescript
 // src/services/api.ts
 import type { ApiError } from '@/types/api';
 import axios, { type AxiosError, type AxiosInstance } from 'axios';
 
-// Create axios instance with credentials for cookie auth
 export const api: AxiosInstance = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '/api/v1',
   headers: {
     'Content-Type': 'application/json',
   },
-  withCredentials: true, // Send cookies with requests
+  withCredentials: true, // Send httpOnly cookies with requests
 });
 
 // Response interceptor - handle errors
 api.interceptors.response.use(
-  (response) => {
-    return response.data;
-  },
+  (response) => response.data,
   (error: AxiosError<ApiError>) => {
     const apiError: ApiError = {
       message: error.response?.data?.message || error.message || 'An error occurred',
       details: error.response?.data?.details,
       code: error.response?.data?.code || String(error.response?.status),
     };
-
     return Promise.reject(apiError);
   }
 );
@@ -383,39 +383,15 @@ api.interceptors.response.use(
 
 ### Auth Service
 
-```typescript
-// src/services/auth.ts
-import { api } from '@/services/api';
-
-export interface LoginCredentials {
-  username: string;
-  password: string;
-}
-
-export interface LoginResponse {
-  message: string;
-}
-
-export const authService = {
-  async login(credentials: LoginCredentials): Promise<LoginResponse> {
-    return api.post('/auth/login', credentials) as Promise<LoginResponse>;
-  },
-
-  async logout(): Promise<void> {
-    await api.post('/auth/logout');
-  },
-};
-```
-
-See [7-authentication.md](7-authentication.md) for complete authentication documentation.
+For authentication implementation details (login, logout, httpOnly cookies), see [7-authentication.md](7-authentication.md).
 
 ### Route Service with Tests
 
 ```typescript
-// tests/unit/services/routeService.spec.ts
+// tests/unit/services/route.spec.ts
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { routeService } from '@/services/routeService';
-import api from '@/services/api';
+import { routeService } from '@/services/route';
+import { api } from '@/services/api';
 
 vi.mock('@/services/api');
 
@@ -474,19 +450,18 @@ describe('routeService', () => {
   });
 });
 
-// src/services/routeService.ts
-import api from './api';
-import type { Route, RouteRequest } from '@/types/api';
+// src/services/route.ts
+import { api } from './api';
+import type { Route, RouteRequest, Station } from '@/types/api';
 
 export const routeService = {
   async calculateRoute(data: RouteRequest): Promise<Route> {
-    const response = await api.post<Route>('/routes', data);
-    return response.data;
+    return api.post('/routes', data) as Promise<Route>;
   },
 
   async getStations(): Promise<Station[]> {
-    // Load from static file or API
-    const response = await fetch('/stations.json');
+    // Load from static JSON file in /data directory
+    const response = await fetch('/data/stations.json');
     return response.json();
   },
 };
@@ -495,8 +470,8 @@ export const routeService = {
 ### Stats Service (Bonus)
 
 ```typescript
-// src/services/statsService.ts
-import api from './api';
+// src/services/stats.ts
+import { api } from './api';
 import type { AnalyticDistanceList } from '@/types/api';
 
 export interface StatsParams {
@@ -507,10 +482,7 @@ export interface StatsParams {
 
 export const statsService = {
   async getDistances(params: StatsParams = {}): Promise<AnalyticDistanceList> {
-    const response = await api.get<AnalyticDistanceList>('/stats/distances', {
-      params,
-    });
-    return response.data;
+    return api.get('/stats/distances', { params }) as Promise<AnalyticDistanceList>;
   },
 };
 ```
@@ -522,7 +494,7 @@ export const statsService = {
 ```typescript
 // src/composables/useRoutes.ts
 import { ref } from 'vue';
-import { routeService } from '@/services/routeService';
+import { routeService } from '@/services/route';
 import type { Route, RouteRequest, Station } from '@/types/api';
 
 export function useRoutes() {
@@ -710,7 +682,7 @@ import {
   Tooltip,
   Legend,
 } from 'chart.js';
-import { statsService } from '@/services/statsService';
+import { statsService } from '@/services/stats';
 import type { AnalyticDistanceList } from '@/types/api';
 
 ChartJS.register(
