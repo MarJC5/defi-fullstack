@@ -12,8 +12,10 @@ services:
       - ./nginx/certs:/etc/nginx/certs:ro
       - frontend_dist:/usr/share/nginx/html/app:ro
     depends_on:
-      - backend
-      - frontend-builder
+      backend:
+        condition: service_healthy
+      frontend-builder:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   # Reverse proxy - Development
@@ -28,8 +30,10 @@ services:
       - ./nginx/nginx.dev.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/certs:/etc/nginx/certs:ro
     depends_on:
-      - backend
-      - frontend
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_started
     restart: unless-stopped
 
   # PHP Backend
@@ -52,6 +56,12 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep php-fpm || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     restart: unless-stopped
 
   # Vue Frontend - Development (hot reload)
