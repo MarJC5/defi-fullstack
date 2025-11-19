@@ -5,37 +5,49 @@ declare(strict_types=1);
 namespace App\Tests\Unit\Domain\Entity;
 
 use App\Domain\Entity\Route;
+use App\Domain\ValueObject\Distance;
+use App\Domain\ValueObject\StationId;
 use PHPUnit\Framework\TestCase;
 
 class RouteTest extends TestCase
 {
-    public function testRouteCreation(): void
+    public function testRouteCreationWithValueObjects(): void
     {
+        $fromStation = StationId::fromString('MX');
+        $toStation = StationId::fromString('CGE');
+        $distance = Distance::fromKilometers(5.5);
+
         $route = new Route(
-            'MX',
-            'CGE',
+            $fromStation,
+            $toStation,
             'ANA-001',
-            5.5,
-            ['MX', 'CGE']
+            $distance,
+            [$fromStation, $toStation]
         );
 
         $this->assertNotEmpty($route->getId());
-        $this->assertEquals('MX', $route->getFromStationId());
-        $this->assertEquals('CGE', $route->getToStationId());
+        $this->assertTrue($route->getFromStationId()->equals($fromStation));
+        $this->assertTrue($route->getToStationId()->equals($toStation));
         $this->assertEquals('ANA-001', $route->getAnalyticCode());
+        $this->assertTrue($route->getDistance()->equals($distance));
         $this->assertEquals(5.5, $route->getDistanceKm());
-        $this->assertEquals(['MX', 'CGE'], $route->getPath());
+        $this->assertCount(2, $route->getPath());
         $this->assertInstanceOf(\DateTimeImmutable::class, $route->getCreatedAt());
     }
 
     public function testRouteToArray(): void
     {
+        $fromStation = StationId::fromString('A');
+        $toStation = StationId::fromString('B');
+        $midStation = StationId::fromString('C');
+        $distance = Distance::fromKilometers(10.0);
+
         $route = new Route(
-            'A',
-            'B',
+            $fromStation,
+            $toStation,
             'TEST-123',
-            10.0,
-            ['A', 'C', 'B']
+            $distance,
+            [$fromStation, $midStation, $toStation]
         );
 
         $array = $route->toArray();
@@ -51,12 +63,16 @@ class RouteTest extends TestCase
 
     public function testGetCreatedAtReturnsDateTimeImmutable(): void
     {
+        $fromStation = StationId::fromString('MX');
+        $toStation = StationId::fromString('CGE');
+        $distance = Distance::fromKilometers(2.5);
+
         $route = new Route(
-            'MX',
-            'CGE',
+            $fromStation,
+            $toStation,
             'TIME-001',
-            2.5,
-            ['MX', 'CGE']
+            $distance,
+            [$fromStation, $toStation]
         );
 
         $createdAt = $route->getCreatedAt();
@@ -66,5 +82,23 @@ class RouteTest extends TestCase
         $now = new \DateTimeImmutable();
         $diff = $now->getTimestamp() - $createdAt->getTimestamp();
         $this->assertLessThan(5, $diff);
+    }
+
+    public function testGetDistanceReturnsValueObject(): void
+    {
+        $fromStation = StationId::fromString('MX');
+        $toStation = StationId::fromString('CGE');
+        $distance = Distance::fromKilometers(7.5);
+
+        $route = new Route(
+            $fromStation,
+            $toStation,
+            'DIST-001',
+            $distance,
+            [$fromStation, $toStation]
+        );
+
+        $this->assertInstanceOf(Distance::class, $route->getDistance());
+        $this->assertEquals(7.5, $route->getDistance()->kilometers());
     }
 }
