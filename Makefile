@@ -21,6 +21,7 @@ install: certs ## Initial project setup (production)
 	docker compose --profile prod build
 	docker compose --profile prod up -d
 	docker compose exec backend sh -c "composer clear-cache && composer install --no-dev --optimize-autoloader"
+	$(MAKE) jwt-keys
 	$(MAKE) db-migrate
 	@echo "${GREEN}Setup complete! Access https://localhost${RESET}"
 
@@ -36,6 +37,7 @@ install-dev: certs ## Development setup (hot reload)
 	docker compose --profile dev up -d
 	docker compose exec backend sh -c "composer clear-cache && composer install"
 	docker compose exec frontend npm install
+	$(MAKE) jwt-keys
 	$(MAKE) db-migrate
 	@echo "${GREEN}Dev setup complete! Access https://localhost${RESET}"
 
@@ -142,3 +144,6 @@ shell-frontend: ## Open frontend shell
 
 jwt-keys: ## Generate JWT keys
 	docker compose exec backend php bin/console lexik:jwt:generate-keypair --skip-if-exists
+
+jwt-token: ## Generate a JWT token for api_user
+	@docker compose exec backend php bin/console lexik:jwt:generate-token api_user

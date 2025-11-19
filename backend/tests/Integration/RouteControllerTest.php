@@ -4,11 +4,27 @@ declare(strict_types=1);
 
 namespace App\Tests\Integration;
 
+use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
+use Symfony\Component\Security\Core\User\InMemoryUser;
 
 class RouteControllerTest extends WebTestCase
 {
-    public function testCreateRouteSuccess(): void
+    private function getAuthHeaders(): array
+    {
+        $client = static::getContainer()->get('test.client');
+        $jwtManager = static::getContainer()->get(JWTTokenManagerInterface::class);
+
+        $user = new InMemoryUser('api_user', '', ['ROLE_API']);
+        $token = $jwtManager->create($user);
+
+        return [
+            'CONTENT_TYPE' => 'application/json',
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $token,
+        ];
+    }
+
+    public function testCreateRouteWithoutAuth(): void
     {
         $client = static::createClient();
 
@@ -18,6 +34,26 @@ class RouteControllerTest extends WebTestCase
             [],
             [],
             ['CONTENT_TYPE' => 'application/json'],
+            json_encode([
+                'fromStationId' => 'MX',
+                'toStationId' => 'CGE',
+                'analyticCode' => 'TEST-001',
+            ])
+        );
+
+        $this->assertResponseStatusCodeSame(401);
+    }
+
+    public function testCreateRouteSuccess(): void
+    {
+        $client = static::createClient();
+
+        $client->request(
+            'POST',
+            '/api/v1/routes',
+            [],
+            [],
+            $this->getAuthHeaders(),
             json_encode([
                 'fromStationId' => 'MX',
                 'toStationId' => 'CGE',
@@ -48,7 +84,7 @@ class RouteControllerTest extends WebTestCase
             '/api/v1/routes',
             [],
             [],
-            ['CONTENT_TYPE' => 'application/json'],
+            $this->getAuthHeaders(),
             json_encode([
                 'fromStationId' => 'MX',
                 'toStationId' => 'BEMM',
@@ -74,7 +110,7 @@ class RouteControllerTest extends WebTestCase
             '/api/v1/routes',
             [],
             [],
-            ['CONTENT_TYPE' => 'application/json'],
+            $this->getAuthHeaders(),
             json_encode([
                 'fromStationId' => 'INVALID',
                 'toStationId' => 'CGE',
@@ -94,7 +130,7 @@ class RouteControllerTest extends WebTestCase
             '/api/v1/routes',
             [],
             [],
-            ['CONTENT_TYPE' => 'application/json'],
+            $this->getAuthHeaders(),
             json_encode([
                 'fromStationId' => 'MX',
                 'toStationId' => 'INVALID',
@@ -114,7 +150,7 @@ class RouteControllerTest extends WebTestCase
             '/api/v1/routes',
             [],
             [],
-            ['CONTENT_TYPE' => 'application/json'],
+            $this->getAuthHeaders(),
             json_encode([
                 'fromStationId' => 'MX',
                 // missing toStationId and analyticCode
@@ -133,7 +169,7 @@ class RouteControllerTest extends WebTestCase
             '/api/v1/routes',
             [],
             [],
-            ['CONTENT_TYPE' => 'application/json'],
+            $this->getAuthHeaders(),
             ''
         );
 
