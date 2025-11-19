@@ -61,8 +61,6 @@ class StatsControllerTest extends WebTestCase
      */
     public function testGetDistancesAggregatesByAnalyticCode(): void
     {
-        $this->markTestSkipped('Requires database persistence - InMemoryRepository does not persist between requests');
-
         $client = static::createClient();
 
         // First create some routes
