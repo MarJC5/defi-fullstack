@@ -23,9 +23,15 @@ export const statsService = {
   async getDistances (params: StatsParams = {}): Promise<StatsResponse> {
     const queryParams = new URLSearchParams()
 
-    if (params.from) queryParams.append('from', params.from)
-    if (params.to) queryParams.append('to', params.to)
-    if (params.groupBy) queryParams.append('groupBy', params.groupBy)
+    if (params.from) {
+      queryParams.append('from', params.from)
+    }
+    if (params.to) {
+      queryParams.append('to', params.to)
+    }
+    if (params.groupBy) {
+      queryParams.append('groupBy', params.groupBy)
+    }
 
     const queryString = queryParams.toString()
     const url = queryString ? `/stats/distances?${queryString}` : '/stats/distances'
