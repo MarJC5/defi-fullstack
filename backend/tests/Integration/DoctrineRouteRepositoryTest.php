@@ -6,6 +6,8 @@ namespace App\Tests\Integration;
 
 use App\Domain\Entity\Route;
 use App\Domain\Repository\RouteRepositoryInterface;
+use App\Domain\ValueObject\Distance;
+use App\Domain\ValueObject\StationId;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 
@@ -25,15 +27,24 @@ class DoctrineRouteRepositoryTest extends KernelTestCase
         $connection->executeStatement('TRUNCATE TABLE routes CASCADE');
     }
 
+    /**
+     * Helper to create Route with Value Objects
+     * @param string[] $pathStrings
+     */
+    private function createRoute(string $from, string $to, string $code, float $distance, array $pathStrings): Route
+    {
+        return new Route(
+            StationId::fromString($from),
+            StationId::fromString($to),
+            $code,
+            Distance::fromKilometers($distance),
+            array_map(fn(string $s) => StationId::fromString($s), $pathStrings)
+        );
+    }
+
     public function testSaveAndFindById(): void
     {
-        $route = new Route(
-            'MX',
-            'CGE',
-            'TEST-001',
-            2.5,
-            ['MX', 'CGE']
-        );
+        $route = $this->createRoute('MX', 'CGE', 'TEST-001', 2.5, ['MX', 'CGE']);
 
         $this->repository->save($route);
 
@@ -41,8 +52,8 @@ class DoctrineRouteRepositoryTest extends KernelTestCase
 
         $this->assertNotNull($found);
         $this->assertEquals($route->getId(), $found->getId());
-        $this->assertEquals('MX', $found->getFromStationId());
-        $this->assertEquals('CGE', $found->getToStationId());
+        $this->assertEquals('MX', $found->getFromStationId()->value());
+        $this->assertEquals('CGE', $found->getToStationId()->value());
         $this->assertEquals('TEST-001', $found->getAnalyticCode());
         $this->assertEquals(2.5, $found->getDistanceKm());
         $this->assertEquals(['MX', 'CGE'], $found->getPath());
@@ -57,9 +68,9 @@ class DoctrineRouteRepositoryTest extends KernelTestCase
 
     public function testFindByAnalyticCode(): void
     {
-        $route1 = new Route('MX', 'CGE', 'CODE-001', 2.5, ['MX', 'CGE']);
-        $route2 = new Route('CGE', 'VUAR', 'CODE-001', 1.5, ['CGE', 'VUAR']);
-        $route3 = new Route('MX', 'VUAR', 'CODE-002', 4.0, ['MX', 'CGE', 'VUAR']);
+        $route1 = $this->createRoute('MX', 'CGE', 'CODE-001', 2.5, ['MX', 'CGE']);
+        $route2 = $this->createRoute('CGE', 'VUAR', 'CODE-001', 1.5, ['CGE', 'VUAR']);
+        $route3 = $this->createRoute('MX', 'VUAR', 'CODE-002', 4.0, ['MX', 'CGE', 'VUAR']);
 
         $this->repository->save($route1);
         $this->repository->save($route2);
@@ -75,7 +86,7 @@ class DoctrineRouteRepositoryTest extends KernelTestCase
 
     public function testFindByAnalyticCodeWithDateFilters(): void
     {
-        $route = new Route('MX', 'CGE', 'FILTER-001', 2.5, ['MX', 'CGE']);
+        $route = $this->createRoute('MX', 'CGE', 'FILTER-001', 2.5, ['MX', 'CGE']);
         $this->repository->save($route);
 
         $today = new \DateTimeImmutable();
@@ -103,9 +114,9 @@ class DoctrineRouteRepositoryTest extends KernelTestCase
 
     public function testGetDistancesByAnalyticCode(): void
     {
-        $route1 = new Route('MX', 'CGE', 'STATS-001', 2.5, ['MX', 'CGE']);
-        $route2 = new Route('CGE', 'VUAR', 'STATS-001', 1.5, ['CGE', 'VUAR']);
-        $route3 = new Route('MX', 'VUAR', 'STATS-002', 4.0, ['MX', 'CGE', 'VUAR']);
+        $route1 = $this->createRoute('MX', 'CGE', 'STATS-001', 2.5, ['MX', 'CGE']);
+        $route2 = $this->createRoute('CGE', 'VUAR', 'STATS-001', 1.5, ['CGE', 'VUAR']);
+        $route3 = $this->createRoute('MX', 'VUAR', 'STATS-002', 4.0, ['MX', 'CGE', 'VUAR']);
 
         $this->repository->save($route1);
         $this->repository->save($route2);
@@ -135,7 +146,7 @@ class DoctrineRouteRepositoryTest extends KernelTestCase
 
     public function testGetDistancesByAnalyticCodeWithDateFilter(): void
     {
-        $route = new Route('MX', 'CGE', 'DATE-001', 2.5, ['MX', 'CGE']);
+        $route = $this->createRoute('MX', 'CGE', 'DATE-001', 2.5, ['MX', 'CGE']);
         $this->repository->save($route);
 
         $today = new \DateTimeImmutable();
@@ -162,7 +173,7 @@ class DoctrineRouteRepositoryTest extends KernelTestCase
 
     public function testGetDistancesByAnalyticCodeWithGroupBy(): void
     {
-        $route = new Route('MX', 'CGE', 'GROUP-001', 2.5, ['MX', 'CGE']);
+        $route = $this->createRoute('MX', 'CGE', 'GROUP-001', 2.5, ['MX', 'CGE']);
         $this->repository->save($route);
 
         $distances = $this->repository->getDistancesByAnalyticCode(null, null, 'month');

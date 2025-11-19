@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domain\Entity;
 
+use App\Domain\ValueObject\Distance;
+use App\Domain\ValueObject\StationId;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Uid\Uuid;
 
@@ -35,19 +37,22 @@ class Route
     #[ORM\Column(name: 'created_at', type: 'datetime_immutable')]
     private \DateTimeImmutable $createdAt;
 
+    /**
+     * @param StationId[] $path
+     */
     public function __construct(
-        string $fromStationId,
-        string $toStationId,
+        StationId $fromStationId,
+        StationId $toStationId,
         string $analyticCode,
-        float $distanceKm,
+        Distance $distance,
         array $path
     ) {
         $this->id = Uuid::v4()->toRfc4122();
-        $this->fromStationId = $fromStationId;
-        $this->toStationId = $toStationId;
+        $this->fromStationId = $fromStationId->value();
+        $this->toStationId = $toStationId->value();
         $this->analyticCode = $analyticCode;
-        $this->distanceKm = $distanceKm;
-        $this->path = $path;
+        $this->distanceKm = $distance->kilometers();
+        $this->path = array_map(fn(StationId $s) => $s->value(), $path);
         $this->createdAt = new \DateTimeImmutable();
     }
 
@@ -56,14 +61,14 @@ class Route
         return $this->id;
     }
 
-    public function getFromStationId(): string
+    public function getFromStationId(): StationId
     {
-        return $this->fromStationId;
+        return StationId::fromString($this->fromStationId);
     }
 
-    public function getToStationId(): string
+    public function getToStationId(): StationId
     {
-        return $this->toStationId;
+        return StationId::fromString($this->toStationId);
     }
 
     public function getAnalyticCode(): string
@@ -71,11 +76,19 @@ class Route
         return $this->analyticCode;
     }
 
+    public function getDistance(): Distance
+    {
+        return Distance::fromKilometers($this->distanceKm);
+    }
+
     public function getDistanceKm(): float
     {
         return $this->distanceKm;
     }
 
+    /**
+     * @return string[]
+     */
     public function getPath(): array
     {
         return $this->path;

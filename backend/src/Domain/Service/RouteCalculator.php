@@ -7,6 +7,8 @@ namespace App\Domain\Service;
 use App\Domain\Entity\Route;
 use App\Domain\Exception\NoRouteFoundException;
 use App\Domain\Exception\StationNotFoundException;
+use App\Domain\ValueObject\Distance;
+use App\Domain\ValueObject\StationId;
 
 class RouteCalculator
 {
@@ -28,7 +30,14 @@ class RouteCalculator
 
         // Same station - no travel needed
         if ($from === $to) {
-            return new Route($from, $to, $analyticCode, 0.0, [$from]);
+            $station = StationId::fromString($from);
+            return new Route(
+                $station,
+                $station,
+                $analyticCode,
+                Distance::zero(),
+                [$station]
+            );
         }
 
         // Dijkstra's algorithm
@@ -98,6 +107,15 @@ class RouteCalculator
             $current = $previous[$current];
         }
 
-        return new Route($from, $to, $analyticCode, $distances[$to], $path);
+        // Convert to Value Objects
+        $pathStations = array_map(fn(string $s) => StationId::fromString($s), $path);
+
+        return new Route(
+            StationId::fromString($from),
+            StationId::fromString($to),
+            $analyticCode,
+            Distance::fromKilometers($distances[$to]),
+            $pathStations
+        );
     }
 }

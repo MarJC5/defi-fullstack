@@ -29,8 +29,8 @@ class CalculateRouteHandlerTest extends TestCase
         $repository->expects($this->once())
             ->method('save')
             ->with($this->callback(function (Route $route) {
-                return $route->getFromStationId() === 'MX'
-                    && $route->getToStationId() === 'CGE'
+                return $route->getFromStationId()->value() === 'MX'
+                    && $route->getToStationId()->value() === 'CGE'
                     && $route->getAnalyticCode() === 'TEST-001'
                     && $route->getDistanceKm() > 0
                     && count($route->getPath()) >= 2;
