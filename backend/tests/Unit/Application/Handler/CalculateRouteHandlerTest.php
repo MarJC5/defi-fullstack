@@ -8,17 +8,34 @@ use App\Application\Command\CalculateRouteCommand;
 use App\Application\Handler\CalculateRouteHandler;
 use App\Domain\Entity\Route;
 use App\Domain\Repository\RouteRepositoryInterface;
+use App\Domain\Service\DistancesDataProviderInterface;
 use App\Domain\Service\GraphBuilder;
+use App\Domain\Service\IdGeneratorInterface;
 use PHPUnit\Framework\TestCase;
 
 class CalculateRouteHandlerTest extends TestCase
 {
-    private string $testDistancesPath;
+    private DistancesDataProviderInterface $distancesDataProvider;
+    private IdGeneratorInterface $idGenerator;
 
     protected function setUp(): void
     {
-        // Use the real distances file for handler tests
-        $this->testDistancesPath = __DIR__ . '/../../../../data/distances.json';
+        // Create a mock distances data provider with test data
+        $this->distancesDataProvider = $this->createMock(DistancesDataProviderInterface::class);
+        $this->distancesDataProvider->method('getDistancesData')->willReturn([
+            [
+                'line' => 'Test Line',
+                'distances' => [
+                    ['parent' => 'MX', 'child' => 'CGE', 'distance' => 1.5],
+                    ['parent' => 'CGE', 'child' => 'VUAR', 'distance' => 2.0],
+                    ['parent' => 'VUAR', 'child' => 'BEMM', 'distance' => 3.0],
+                ],
+            ],
+        ]);
+
+        // Create a mock ID generator
+        $this->idGenerator = $this->createMock(IdGeneratorInterface::class);
+        $this->idGenerator->method('generate')->willReturn('test-handler-id');
     }
 
     public function testHandleCalculatesAndSavesRoute(): void
@@ -39,14 +56,15 @@ class CalculateRouteHandlerTest extends TestCase
         $handler = new CalculateRouteHandler(
             $graphBuilder,
             $repository,
-            $this->testDistancesPath
+            $this->idGenerator,
+            $this->distancesDataProvider
         );
 
         $command = new CalculateRouteCommand('MX', 'CGE', 'TEST-001');
         $route = $handler->handle($command);
 
-        $this->assertEquals('MX', $route->getFromStationId());
-        $this->assertEquals('CGE', $route->getToStationId());
+        $this->assertEquals('MX', $route->getFromStationId()->value());
+        $this->assertEquals('CGE', $route->getToStationId()->value());
         $this->assertEquals('TEST-001', $route->getAnalyticCode());
         $this->assertGreaterThan(0, $route->getDistanceKm());
         $this->assertEquals('MX', $route->getPath()[0]);
@@ -68,7 +86,8 @@ class CalculateRouteHandlerTest extends TestCase
         $handler = new CalculateRouteHandler(
             $graphBuilder,
             $repository,
-            $this->testDistancesPath
+            $this->idGenerator,
+            $this->distancesDataProvider
         );
 
         $command = new CalculateRouteCommand('MX', 'VUAR', 'TEST-002');
@@ -85,7 +104,8 @@ class CalculateRouteHandlerTest extends TestCase
         $handler = new CalculateRouteHandler(
             $graphBuilder,
             $repository,
-            $this->testDistancesPath
+            $this->idGenerator,
+            $this->distancesDataProvider
         );
 
         $command = new CalculateRouteCommand('MX', 'BEMM', 'MULTI-001');
@@ -105,7 +125,8 @@ class CalculateRouteHandlerTest extends TestCase
         $handler = new CalculateRouteHandler(
             $graphBuilder,
             $repository,
-            $this->testDistancesPath
+            $this->idGenerator,
+            $this->distancesDataProvider
         );
 
         $command = new CalculateRouteCommand('MX', 'MX', 'SAME-001');

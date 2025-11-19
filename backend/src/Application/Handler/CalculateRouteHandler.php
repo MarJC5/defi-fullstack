@@ -7,7 +7,9 @@ namespace App\Application\Handler;
 use App\Application\Command\CalculateRouteCommand;
 use App\Domain\Entity\Route;
 use App\Domain\Repository\RouteRepositoryInterface;
+use App\Domain\Service\DistancesDataProviderInterface;
 use App\Domain\Service\GraphBuilder;
+use App\Domain\Service\IdGeneratorInterface;
 use App\Domain\Service\RouteCalculator;
 
 class CalculateRouteHandler
@@ -17,15 +19,11 @@ class CalculateRouteHandler
     public function __construct(
         private readonly GraphBuilder $graphBuilder,
         private readonly RouteRepositoryInterface $repository,
-        string $distancesPath
+        private readonly IdGeneratorInterface $idGenerator,
+        private readonly DistancesDataProviderInterface $distancesDataProvider
     ) {
-        $json = file_get_contents($distancesPath);
-        if ($json === false) {
-            throw new \RuntimeException("Cannot read distances file: $distancesPath");
-        }
-        $distancesData = json_decode($json, true);
-        $graph = $this->graphBuilder->build($distancesData);
-        $this->calculator = new RouteCalculator($graph);
+        $graph = $this->graphBuilder->build($this->distancesDataProvider->getDistancesData());
+        $this->calculator = new RouteCalculator($graph, $this->idGenerator);
     }
 
     public function handle(CalculateRouteCommand $command): Route
