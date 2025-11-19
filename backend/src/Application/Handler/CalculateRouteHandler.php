@@ -19,7 +19,11 @@ class CalculateRouteHandler
         private readonly RouteRepositoryInterface $repository,
         string $distancesPath
     ) {
-        $distancesData = json_decode(file_get_contents($distancesPath), true);
+        $json = file_get_contents($distancesPath);
+        if ($json === false) {
+            throw new \RuntimeException("Cannot read distances file: $distancesPath");
+        }
+        $distancesData = json_decode($json, true);
         $graph = $this->graphBuilder->build($distancesData);
         $this->calculator = new RouteCalculator($graph);
     }

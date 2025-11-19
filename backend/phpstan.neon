@@ -1,0 +1,11 @@
+parameters:
+    level: 8
+    paths:
+        - src
+    excludePaths:
+        - src/Kernel.php
+    reportUnmatchedIgnoredErrors: false
+    ignoreErrors:
+        # Ignore missing generic typehints for arrays
+        - identifier: missingType.generics
+        - identifier: missingType.iterableValue
