@@ -56,7 +56,7 @@ class DoctrineRouteRepository implements RouteRepositoryInterface
     }
 
     /**
-     * @return array<array{analyticCode: string, totalDistanceKm: float, group?: string}>
+     * @return array<array{analyticCode: string, totalDistanceKm: float, group?: string, periodStart?: string, periodEnd?: string}>
      */
     public function getDistancesByAnalyticCode(
         ?\DateTimeImmutable $from = null,
@@ -114,10 +114,37 @@ class DoctrineRouteRepository implements RouteRepositoryInterface
             ];
 
             if ($groupBy !== 'none' && isset($row['group'])) {
-                $data['group'] = $row['group'];
+                $group = $row['group'];
+                $data['group'] = $group;
+
+                // Calculate periodStart and periodEnd based on groupBy
+                [$periodStart, $periodEnd] = $this->calculatePeriodDates($group, $groupBy);
+                $data['periodStart'] = $periodStart;
+                $data['periodEnd'] = $periodEnd;
             }
 
             return $data;
         }, $result);
+    }
+
+    /**
+     * Calculate periodStart and periodEnd dates based on the group value and groupBy type.
+     *
+     * @return array{0: string, 1: string}
+     */
+    private function calculatePeriodDates(string $group, string $groupBy): array
+    {
+        return match ($groupBy) {
+            'day' => [$group, $group],
+            'month' => [
+                $group . '-01',
+                date('Y-m-t', strtotime($group . '-01')),
+            ],
+            'year' => [
+                $group . '-01-01',
+                $group . '-12-31',
+            ],
+            default => ['', ''],
+        };
     }
 }

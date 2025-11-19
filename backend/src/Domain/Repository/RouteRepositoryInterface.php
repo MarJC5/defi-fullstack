@@ -22,7 +22,7 @@ interface RouteRepositoryInterface
     ): array;
 
     /**
-     * @return array<array{analyticCode: string, totalDistanceKm: float, group?: string}>
+     * @return array<array{analyticCode: string, totalDistanceKm: float, group?: string, periodStart?: string, periodEnd?: string}>
      */
     public function getDistancesByAnalyticCode(
         ?\DateTimeImmutable $from = null,
