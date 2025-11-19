@@ -1,5 +1,6 @@
 import { mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { ref } from 'vue'
 import StatsChart from '@/components/StatsChart.vue'
 import { useStats } from '@/composables/useStats'
 
@@ -11,10 +12,10 @@ describe('StatsChart', () => {
   const mockLoadStats = vi.fn()
   const mockGetChartData = vi.fn()
 
-  const createMockUseStats = (overrides = {}) => ({
-    stats: { value: null },
-    loading: { value: false },
-    error: { value: null },
+  const createMockUseStats = (overrides: Record<string, unknown> = {}) => ({
+    stats: ref(null),
+    loading: ref(false),
+    error: ref(null),
     loadStats: mockLoadStats,
     getChartData: mockGetChartData,
     ...overrides,
@@ -56,7 +57,7 @@ describe('StatsChart', () => {
   describe('loading state', () => {
     it('shows loading indicator when loading', () => {
       vi.mocked(useStats).mockReturnValue(createMockUseStats({
-        loading: { value: true },
+        loading: ref(true),
       }))
 
       const wrapper = mountComponent()
@@ -65,7 +66,7 @@ describe('StatsChart', () => {
 
     it('disables load button when loading', () => {
       vi.mocked(useStats).mockReturnValue(createMockUseStats({
-        loading: { value: true },
+        loading: ref(true),
       }))
 
       const wrapper = mountComponent()
@@ -77,7 +78,7 @@ describe('StatsChart', () => {
   describe('error state', () => {
     it('displays error message when error occurs', () => {
       vi.mocked(useStats).mockReturnValue(createMockUseStats({
-        error: { value: 'Failed to load stats' },
+        error: ref('Failed to load stats'),
       }))
 
       const wrapper = mountComponent()
@@ -93,17 +94,15 @@ describe('StatsChart', () => {
       })
 
       vi.mocked(useStats).mockReturnValue(createMockUseStats({
-        stats: {
-          value: {
-            from: null,
-            to: null,
-            groupBy: 'none',
-            items: [
-              { analyticCode: 'ANA-001', totalDistanceKm: 100 },
-              { analyticCode: 'ANA-002', totalDistanceKm: 200 },
-            ],
-          },
-        },
+        stats: ref({
+          from: null,
+          to: null,
+          groupBy: 'none',
+          items: [
+            { analyticCode: 'ANA-001', totalDistanceKm: 100 },
+            { analyticCode: 'ANA-002', totalDistanceKm: 200 },
+          ],
+        }),
       }))
 
       const wrapper = mountComponent()
@@ -112,16 +111,14 @@ describe('StatsChart', () => {
 
     it('renders stats table with data', () => {
       vi.mocked(useStats).mockReturnValue(createMockUseStats({
-        stats: {
-          value: {
-            from: null,
-            to: null,
-            groupBy: 'none',
-            items: [
-              { analyticCode: 'ANA-001', totalDistanceKm: 100.5 },
-            ],
-          },
-        },
+        stats: ref({
+          from: null,
+          to: null,
+          groupBy: 'none',
+          items: [
+            { analyticCode: 'ANA-001', totalDistanceKm: 100.5 },
+          ],
+        }),
       }))
 
       const wrapper = mountComponent()

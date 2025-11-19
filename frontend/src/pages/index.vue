@@ -17,6 +17,16 @@
     <!-- Main app when authenticated -->
     <template v-else>
       <v-row class="mb-4">
+        <v-col>
+          <v-btn-toggle v-model="activeView" data-testid="view-toggle" mandatory>
+            <v-btn data-testid="btn-calculator" value="calculator">
+              Calculator
+            </v-btn>
+            <v-btn data-testid="btn-statistics" value="statistics">
+              Statistics
+            </v-btn>
+          </v-btn-toggle>
+        </v-col>
         <v-col class="text-right">
           <v-btn
             color="secondary"
@@ -29,34 +39,49 @@
         </v-col>
       </v-row>
 
-      <v-row>
-        <v-col cols="12" md="6">
-          <RouteForm
-            :loading="loading"
-            @submit="calculateRoute"
-          />
-        </v-col>
-        <v-col cols="12" md="6">
-          <RouteResult v-if="route" :route="route" />
-          <v-alert v-else-if="error" type="error">
-            {{ error }}
-          </v-alert>
-        </v-col>
-      </v-row>
+      <!-- Calculator View -->
+      <template v-if="activeView === 'calculator'">
+        <v-row>
+          <v-col cols="12" md="6">
+            <RouteForm
+              :loading="loading"
+              @submit="calculateRoute"
+            />
+          </v-col>
+          <v-col cols="12" md="6">
+            <RouteResult v-if="route" :route="route" />
+            <v-alert v-else-if="error" type="error">
+              {{ error }}
+            </v-alert>
+          </v-col>
+        </v-row>
+      </template>
+
+      <!-- Statistics View -->
+      <template v-else-if="activeView === 'statistics'">
+        <v-row>
+          <v-col cols="12">
+            <StatsChart />
+          </v-col>
+        </v-row>
+      </template>
     </template>
   </v-container>
 </template>
 
 <script setup lang="ts">
-  import { onMounted } from 'vue'
+  import { onMounted, ref } from 'vue'
   import LoginForm from '@/components/LoginForm.vue'
   import RouteForm from '@/components/RouteForm.vue'
   import RouteResult from '@/components/RouteResult.vue'
+  import StatsChart from '@/components/StatsChart.vue'
   import { useAuth } from '@/composables/useAuth'
   import { useRoutes } from '@/composables/useRoutes'
 
   const { isAuthenticated, isCheckingAuth, logout, checkAuth } = useAuth()
   const { loading, error, route, calculateRoute } = useRoutes()
+
+  const activeView = ref<'calculator' | 'statistics'>('calculator')
 
   onMounted(() => {
     checkAuth()
