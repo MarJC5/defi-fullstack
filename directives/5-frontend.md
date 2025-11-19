@@ -32,6 +32,7 @@ frontend/
 │   ├── assets/
 │   ├── components/
 │   │   ├── AppFooter.vue
+│   │   ├── LoginForm.vue
 │   │   ├── RouteForm.vue
 │   │   ├── RouteResult.vue
 │   │   └── StationSelect.vue
@@ -44,6 +45,13 @@ frontend/
 │   │   ├── index.ts
 │   │   └── vuetify.ts
 │   ├── router/
+│   ├── composables/
+│   │   ├── useAuth.ts
+│   │   └── useRoutes.ts
+│   ├── services/
+│   │   ├── api.ts
+│   │   ├── auth.ts
+│   │   └── route.ts
 │   ├── stores/
 │   │   └── app.ts
 │   ├── styles/
@@ -338,42 +346,68 @@ const handleSubmit = () => {
 
 ## Services with TDD
 
-### API Service
+### API Service (httpOnly Cookie Auth)
+
+The API service uses httpOnly cookies for JWT authentication. The browser automatically includes the cookie with each request - no manual token management needed.
 
 ```typescript
 // src/services/api.ts
-import axios, { type AxiosInstance } from 'axios';
+import type { ApiError } from '@/types/api';
+import axios, { type AxiosError, type AxiosInstance } from 'axios';
 
-const api: AxiosInstance = axios.create({
+// Create axios instance with credentials for cookie auth
+export const api: AxiosInstance = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '/api/v1',
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true, // Send cookies with requests
 });
 
-// Add JWT token to requests
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('jwt_token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
-// Handle errors globally
+// Response interceptor - handle errors
 api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      // Handle unauthorized
-      localStorage.removeItem('jwt_token');
-    }
-    return Promise.reject(error);
+  (response) => {
+    return response.data;
+  },
+  (error: AxiosError<ApiError>) => {
+    const apiError: ApiError = {
+      message: error.response?.data?.message || error.message || 'An error occurred',
+      details: error.response?.data?.details,
+      code: error.response?.data?.code || String(error.response?.status),
+    };
+
+    return Promise.reject(apiError);
   }
 );
-
-export default api;
 ```
+
+### Auth Service
+
+```typescript
+// src/services/auth.ts
+import { api } from '@/services/api';
+
+export interface LoginCredentials {
+  username: string;
+  password: string;
+}
+
+export interface LoginResponse {
+  message: string;
+}
+
+export const authService = {
+  async login(credentials: LoginCredentials): Promise<LoginResponse> {
+    return api.post('/auth/login', credentials) as Promise<LoginResponse>;
+  },
+
+  async logout(): Promise<void> {
+    await api.post('/auth/logout');
+  },
+};
+```
+
+See [7-authentication.md](7-authentication.md) for complete authentication documentation.
 
 ### Route Service with Tests
 

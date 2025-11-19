@@ -11,12 +11,12 @@ nelmio_api_doc:
                 email: n.girardet@mob.ch
         components:
             securitySchemes:
-                Bearer:
+                bearerAuth:
                     type: http
                     scheme: bearer
                     bearerFormat: JWT
         security:
-            - Bearer: []
+            - bearerAuth: []
     areas:
         default:
             path_patterns:

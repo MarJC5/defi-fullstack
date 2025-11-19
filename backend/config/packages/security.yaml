@@ -7,8 +7,8 @@ security:
         users_in_memory:
             memory:
                 users:
-                    api_user:
-                        password: '$2y$13$dummyHashForApiUser123456789012345678901234567890'
+                    '%env(API_USER_NAME)%':
+                        password: '%env(API_USER_PASSWORD_HASH)%'
                         roles: ['ROLE_API']
     firewalls:
         dev:
@@ -27,6 +27,8 @@ security:
     access_control:
         - { path: ^/api/doc, roles: PUBLIC_ACCESS }
         - { path: ^/api/v1/health, roles: PUBLIC_ACCESS }
+        - { path: ^/api/v1/auth/login$, roles: PUBLIC_ACCESS }
+        - { path: ^/api/v1/auth/logout$, roles: PUBLIC_ACCESS }
         - { path: ^/api, roles: IS_AUTHENTICATED_FULLY }
 
 when@test:

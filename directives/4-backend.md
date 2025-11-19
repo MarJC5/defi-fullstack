@@ -649,9 +649,26 @@ lexik_jwt_authentication:
     public_key: '%env(resolve:JWT_PUBLIC_KEY)%'
     pass_phrase: '%env(JWT_PASSPHRASE)%'
     token_ttl: 3600
+    token_extractors:
+        # For Swagger/API clients
+        authorization_header:
+            enabled: true
+            prefix: Bearer
+            name: Authorization
+        # For frontend (httpOnly cookie)
+        cookie:
+            enabled: true
+            name: jwt_token
 
 # config/packages/security.yaml
 security:
+    providers:
+        users_in_memory:
+            memory:
+                users:
+                    '%env(API_USER_NAME)%':
+                        password: '%env(API_USER_PASSWORD_HASH)%'
+                        roles: ['ROLE_API']
     firewalls:
         api:
             pattern: ^/api
@@ -659,8 +676,60 @@ security:
             jwt: ~
 
     access_control:
-        - { path: ^/api/v1, roles: IS_AUTHENTICATED_FULLY }
+        - { path: ^/api/doc, roles: PUBLIC_ACCESS }
+        - { path: ^/api/v1/health, roles: PUBLIC_ACCESS }
+        - { path: ^/api/v1/auth/login$, roles: PUBLIC_ACCESS }
+        - { path: ^/api/v1/auth/logout$, roles: PUBLIC_ACCESS }
+        - { path: ^/api, roles: IS_AUTHENTICATED_FULLY }
 ```
+
+### Auth Controller (Login/Logout with httpOnly cookies)
+
+```php
+// src/Controller/AuthController.php
+#[Route('/api/v1/auth')]
+class AuthController extends AbstractController
+{
+    #[Route('/login', methods: ['POST'])]
+    public function login(Request $request): JsonResponse
+    {
+        $data = json_decode($request->getContent(), true);
+        $user = $this->userProvider->loadUserByIdentifier($data['username']);
+
+        if (!$this->passwordHasher->isPasswordValid($user, $data['password'])) {
+            return new JsonResponse(['error' => 'Invalid credentials'], 401);
+        }
+
+        $token = $this->jwtManager->create($user);
+
+        $response = new JsonResponse(['message' => 'Login successful']);
+        $cookie = Cookie::create('jwt_token')
+            ->withValue($token)
+            ->withExpires(time() + 3600)
+            ->withSecure(true)
+            ->withHttpOnly(true)
+            ->withSameSite('lax');
+
+        $response->headers->setCookie($cookie);
+        return $response;
+    }
+
+    #[Route('/logout', methods: ['POST'])]
+    public function logout(): JsonResponse
+    {
+        $response = new JsonResponse(['message' => 'Logout successful']);
+        $cookie = Cookie::create('jwt_token')
+            ->withValue('')
+            ->withExpires(1)
+            ->withHttpOnly(true);
+
+        $response->headers->setCookie($cookie);
+        return $response;
+    }
+}
+```
+
+> **Note**: See [7-authentication.md](7-authentication.md) for complete auth documentation.
 
 ### Generate JWT Keys
 
