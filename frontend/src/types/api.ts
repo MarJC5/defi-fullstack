@@ -2,6 +2,13 @@
  * API Types - Generated from OpenAPI spec (docs/openapi.yml)
  */
 
+// Domain types
+export interface Station {
+  id: number
+  shortName: string
+  longName: string
+}
+
 // Request types
 export interface RouteRequest {
   fromStationId: string
