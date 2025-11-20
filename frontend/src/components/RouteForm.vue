@@ -63,10 +63,13 @@
       </v-card-text>
       <v-card-actions>
         <v-btn
+          block
           color="primary"
           data-testid="btn-submit"
           :disabled="loading || stationsLoading"
           :loading="loading"
+          prepend-icon="mdi-calculator-variant"
+          size="large"
           type="submit"
         >
           Calculate

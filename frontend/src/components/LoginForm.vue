@@ -29,10 +29,13 @@
       </v-card-text>
       <v-card-actions>
         <v-btn
+          block
           color="primary"
           data-testid="btn-login"
           :disabled="isLoading"
           :loading="isLoading"
+          prepend-icon="mdi-login"
+          size="large"
           type="submit"
         >
           Login

@@ -8,7 +8,7 @@
     </v-row>
 
     <!-- Login form when not authenticated -->
-    <v-row v-else-if="!isAuthenticated" align="center" justify="center">
+    <v-row v-else-if="!isAuthenticated" align="center" justify="center" style="min-height: 80vh">
       <v-col cols="12" lg="4" md="6" sm="8">
         <LoginForm />
       </v-col>
@@ -18,19 +18,34 @@
     <template v-else>
       <v-row class="mb-4">
         <v-col>
-          <v-btn-toggle v-model="activeView" data-testid="view-toggle" mandatory>
+          <v-btn-toggle
+            v-model="activeView"
+            color="primary"
+            data-testid="view-toggle"
+            density="compact"
+            divided
+            mandatory
+            variant="outlined"
+          >
             <v-btn data-testid="btn-calculator" value="calculator">
+              <v-icon start>
+                mdi-calculator
+              </v-icon>
               Calculator
             </v-btn>
             <v-btn data-testid="btn-statistics" value="statistics">
+              <v-icon start>
+                mdi-chart-line
+              </v-icon>
               Statistics
             </v-btn>
           </v-btn-toggle>
         </v-col>
         <v-col class="text-right">
           <v-btn
-            color="secondary"
+            color="primary"
             data-testid="btn-logout"
+            prepend-icon="mdi-logout"
             variant="outlined"
             @click="logout"
           >
