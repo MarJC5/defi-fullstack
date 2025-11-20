@@ -3,21 +3,55 @@
     <v-card>
       <v-card-title>Calculate Route</v-card-title>
       <v-card-text>
-        <v-text-field
+        <v-autocomplete
           v-model="form.fromStationId"
+          clearable
           data-testid="input-from-station-id"
+          item-title="longName"
+          item-value="shortName"
+          :items="stations"
           label="From Station"
-          placeholder="e.g., MX"
+          :loading="stationsLoading"
+          no-data-text="No stations found"
+          placeholder="Search for a station..."
           required
-        />
+        >
+          <template #item="{ props, item }">
+            <v-list-item v-bind="props">
+              <template #title>
+                {{ item.raw.longName }}
+              </template>
+              <template #subtitle>
+                {{ item.raw.shortName }}
+              </template>
+            </v-list-item>
+          </template>
+        </v-autocomplete>
 
-        <v-text-field
+        <v-autocomplete
           v-model="form.toStationId"
+          clearable
           data-testid="input-to-station-id"
+          item-title="longName"
+          item-value="shortName"
+          :items="stations"
           label="To Station"
-          placeholder="e.g., CGE"
+          :loading="stationsLoading"
+          no-data-text="No stations found"
+          placeholder="Search for a station..."
           required
-        />
+        >
+          <template #item="{ props, item }">
+            <v-list-item v-bind="props">
+              <template #title>
+                {{ item.raw.longName }}
+              </template>
+              <template #subtitle>
+                {{ item.raw.shortName }}
+              </template>
+            </v-list-item>
+          </template>
+        </v-autocomplete>
 
         <v-text-field
           v-model="form.analyticCode"
@@ -31,7 +65,7 @@
         <v-btn
           color="primary"
           data-testid="btn-submit"
-          :disabled="loading"
+          :disabled="loading || stationsLoading"
           :loading="loading"
           type="submit"
         >
@@ -45,6 +79,7 @@
 <script setup lang="ts">
   import type { RouteRequest } from '@/types/api'
   import { reactive } from 'vue'
+  import { useStations } from '@/composables/useStations'
 
   interface Props {
     loading?: boolean
@@ -57,6 +92,8 @@
   const emit = defineEmits<{
     submit: [data: RouteRequest]
   }>()
+
+  const { stations, loading: stationsLoading } = useStations()
 
   const form = reactive<RouteRequest>({
     fromStationId: '',

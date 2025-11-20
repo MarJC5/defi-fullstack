@@ -1,8 +1,31 @@
+import type { Station } from '@/types/api'
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { ref } from 'vue'
 import RouteForm from '@/components/RouteForm.vue'
 
+// Mock the useStations composable
+vi.mock('@/composables/useStations', () => ({
+  useStations: vi.fn(),
+}))
+
 describe('RouteForm', () => {
+  const mockStations: Station[] = [
+    { id: 1, shortName: 'MX', longName: 'Montreux' },
+    { id: 2, shortName: 'CGE', longName: 'Montreux-Collège' },
+    { id: 3, shortName: 'VV', longName: 'Vevey' },
+  ]
+
+  beforeEach(async () => {
+    const { useStations } = await import('@/composables/useStations')
+    vi.mocked(useStations).mockReturnValue({
+      stations: ref(mockStations),
+      loading: ref(false),
+      error: ref(null),
+      loadStations: vi.fn(),
+    })
+  })
+
   const mountComponent = (props = {}) => {
     return mount(RouteForm, {
       props,
@@ -35,12 +58,12 @@ describe('RouteForm', () => {
     it('emits submit event with form data', async () => {
       const wrapper = mountComponent()
 
-      const fromInput = wrapper.find('[data-testid="input-from-station-id"] input')
-      const toInput = wrapper.find('[data-testid="input-to-station-id"] input')
-      const analyticInput = wrapper.find('[data-testid="input-analytic-code"] input')
+      // Set values directly on the component's reactive form
+      // This simulates user selection from autocomplete
+      wrapper.vm.form.fromStationId = 'MX'
+      wrapper.vm.form.toStationId = 'CGE'
 
-      await fromInput.setValue('MX')
-      await toInput.setValue('CGE')
+      const analyticInput = wrapper.find('[data-testid="input-analytic-code"] input')
       await analyticInput.setValue('TEST-001')
 
       await wrapper.find('form').trigger('submit')
