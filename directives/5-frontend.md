@@ -5,6 +5,7 @@
 - **TypeScript 5** (required)
 - **Vue.js 3** (their production framework)
 - **Vuetify 3** (their UI framework)
+- **Chart.js + vue-chartjs** (data visualization)
 - **Vitest** (recommended) or Jest
 - **ESLint + Prettier** (linting)
 
@@ -20,7 +21,7 @@ npm create vuetify@latest frontend -- --preset essentials --typescript --package
 
 # Add additional dependencies
 cd frontend
-npm install axios
+npm install axios chart.js vue-chartjs
 npm install -D tailwindcss @tailwindcss/vite vitest @vitest/coverage-v8 @vue/test-utils
 ```
 
@@ -34,9 +35,10 @@ frontend/
 │   │   ├── AppFooter.vue
 │   │   ├── HealthCheck.vue     # Health status indicator
 │   │   ├── LoginForm.vue
-│   │   ├── RouteForm.vue
-│   │   ├── RouteResult.vue
-│   │   └── StatsChart.vue      # Stats visualization (bonus)
+│   │   ├── RouteForm.vue       # Station autocomplete
+│   │   ├── RouteResult.vue     # Timeline visualization
+│   │   ├── StatsChart.vue      # Stats table with filters
+│   │   └── DistanceChart.vue   # Chart.js visualization (bonus)
 │   ├── layouts/
 │   │   └── default.vue
 │   ├── pages/              # File-based routing
@@ -49,6 +51,7 @@ frontend/
 │   ├── composables/
 │   │   ├── useAuth.ts
 │   │   ├── useRoutes.ts
+│   │   ├── useStations.ts      # Stations data loader
 │   │   └── useStats.ts         # Stats data composable
 │   ├── services/
 │   │   ├── api.ts

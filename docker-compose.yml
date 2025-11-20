@@ -90,7 +90,7 @@ services:
       target: build
     volumes:
       - frontend_dist:/app/dist
-      - ./data:/app/public/data:ro
+      - ./data:/app/dist/public/data:ro
 
   # Database
   db:

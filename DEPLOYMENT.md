@@ -194,14 +194,16 @@ defi-fullstack/
 ### Frontend (Composables Architecture)
 
 **Components** (Vue 3 SFC)
-- `RouteForm`: Sélection des stations + code analytique
-- `RouteResult`: Affichage du chemin calculé
-- `StatsChart`: Graphique des statistiques avec toggle
+- `RouteForm`: Sélection des stations avec autocomplete (Vuetify v-autocomplete)
+- `RouteResult`: Timeline de trajet avec Vuetify v-timeline
+- `StatsChart`: Tableau de statistiques avec filtres
+- `DistanceChart`: Graphiques interactifs Chart.js (bar, horizontal bar, pie)
 - `LoginForm`: Authentification JWT
 
 **Composables** (Logique réutilisable)
 - `useRoutes`: Gestion des routes (calculate, fetch)
 - `useStats`: Récupération des statistiques
+- `useStations`: Chargement des stations depuis /data/stations.json
 - `useAuth`: Authentification et gestion du token
 
 **Services** (API Client)
@@ -317,6 +319,10 @@ VITE_API_BASE_URL=https://localhost/api/v1
 
 Les certificats auto-signés sont générés automatiquement au démarrage dans `docker/nginx/ssl/`.
 
+> ⚠️ **Important**: Après un rebuild (`make clean`), les certificats SSL sont régénérés et les tokens JWT deviennent invalides.
+> Les utilisateurs doivent vider les données du site dans leur navigateur (cookies, cache) et se reconnecter.
+> Voir la section [Dépannage - Après un Rebuild](#%EF%B8%8F-après-un-rebuild---ssl-et-jwt-invalides) pour plus de détails.
+
 Pour utiliser des certificats Let's Encrypt en production :
 
 ```bash
@@ -325,6 +331,8 @@ docker compose exec nginx rm /etc/nginx/ssl/*
 docker compose exec nginx certbot --nginx -d votre-domaine.com
 docker compose restart nginx
 ```
+
+> 💡 **Astuce Production**: Avec Let's Encrypt, les certificats sont persistés dans un volume Docker et ne changent pas lors des redémarrages, évitant ainsi le problème d'invalidation des JWT.
 
 ### Base de Données
 
@@ -425,6 +433,34 @@ make clean
 docker compose build --no-cache
 make install-dev
 ```
+
+### ⚠️ Après un Rebuild - SSL et JWT Invalides
+
+**Symptôme**: Après `make clean` ou rebuild complet, erreurs d'authentification ou erreurs SSL
+
+**Cause**:
+- Les certificats SSL auto-signés sont régénérés à chaque rebuild
+- Les tokens JWT existants deviennent invalides (nouvelle instance)
+- Les cookies JWT restent dans le navigateur mais ne sont plus valides
+
+**Solution**:
+```bash
+# 1. Redémarrer nginx pour charger les nouveaux certificats SSL
+docker compose restart nginx
+
+# 2. Dans le navigateur :
+#    - Chrome/Edge : Ouvrir DevTools (F12) > Application > Storage > Clear site data
+#    - Firefox : Ouvrir DevTools (F12) > Storage > Cookies > Supprimer tous les cookies
+#    - Safari : Développement > Vider les caches
+#
+# Ou en navigation privée pour tester rapidement
+
+# 3. Accepter le nouveau certificat auto-signé dans le navigateur
+
+# 4. Se reconnecter à l'application
+```
+
+**Note**: En production avec des certificats Let's Encrypt valides, ce problème n'existe pas car les certificats sont persistés entre les redémarrages.
 
 ### Tests qui échouent
 
