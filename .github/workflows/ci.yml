@@ -272,7 +272,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend
           tags: |
-            type=sha,prefix=
+            type=sha,prefix=sha-,format=long
             type=ref,event=branch
             type=ref,event=pr
 
@@ -292,7 +292,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend
           tags: |
-            type=sha,prefix=
+            type=sha,prefix=sha-,format=long
             type=ref,event=branch
             type=ref,event=pr
 
