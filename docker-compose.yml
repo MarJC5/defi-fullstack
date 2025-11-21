@@ -11,6 +11,7 @@ services:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/certs:/etc/nginx/certs:ro
       - frontend_dist:/usr/share/nginx/html/app:ro
+      - ./backend/public:/var/www/html/public:ro
     depends_on:
       backend:
         condition: service_healthy
