@@ -220,7 +220,7 @@ EXPOSE 3000
 
 # Install dependencies and start dev server
 # Dependencies are installed at runtime since source is mounted
-CMD ["sh", "-c", "if [ -f package-lock.json ]; then npm ci; else npm install; fi && npm run dev"]
+CMD ["sh", "-c", "npm install && npm run dev"]
 
 # Build stage
 FROM node:20-alpine AS build
@@ -233,11 +233,22 @@ RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 COPY . .
 RUN npm run build
 
-# Production stage - static files only
-FROM scratch AS prod
+# Production stage - copy build to volume
+FROM node:20-alpine AS prod
 
-COPY --from=build /app/dist /dist
+WORKDIR /output
+
+COPY --from=build /app/dist ./dist
+
+# Script to copy files to mounted volume and exit
+# This ensures the volume is always refreshed with latest build
+CMD ["sh", "-c", "if [ -d /target ]; then rm -rf /target/* && cp -r /output/dist/* /target/; fi; echo 'Build copied to volume'; exit 0"]
 ```
+
+**Why this approach?**
+- The `prod` stage copies built files from `/output/dist` to `/target` (the mounted volume)
+- This ensures that on every container start, the volume gets the fresh build
+- Solves the Docker volume caching issue where old files persist
 
 ---
 
@@ -339,6 +350,18 @@ Proxies to Vite dev server for hot reload:
 
 ### Generate Self-Signed Certificates (Development)
 
+The `make install` and `make install-dev` commands automatically generate SSL certificates if they don't exist. Certificates are **not regenerated** on subsequent runs to avoid browser warnings.
+
+```bash
+# Automatic generation (part of make install)
+make certs           # Only generates if missing
+
+# Force regeneration (if certificates expire or are corrupted)
+make certs-renew     # Deletes and recreates certificates
+```
+
+**Manual generation** (if not using Makefile):
+
 ```bash
 # Create certs directory
 mkdir -p nginx/certs
@@ -349,6 +372,12 @@ openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
   -out nginx/certs/server.crt \
   -subj "/C=CH/ST=Vaud/L=Montreux/O=Dev/CN=localhost"
 ```
+
+**Important**:
+- Certificates are valid for 365 days
+- They are self-signed (browser will show warning on first access)
+- Once accepted in your browser, they persist until regenerated
+- Use `make certs-renew` if certificates expire
 
 ### .gitignore for certificates
 
@@ -643,28 +672,77 @@ help: ## Show this help
 
 ## Setup
 install: certs ## Initial project setup (production)
+	@echo "${YELLOW}Cleaning up existing Docker resources...${RESET}"
+	docker compose --profile dev --profile prod down --remove-orphans 2>/dev/null || true
+	docker network prune -f 2>/dev/null || true
 	cp -n .env.example .env || true
+	cp -n backend/.env.example backend/.env || true
+	@sed -i '' 's/APP_ENV=dev/APP_ENV=prod/' .env 2>/dev/null || sed -i 's/APP_ENV=dev/APP_ENV=prod/' .env
+	@sed -i '' 's/APP_ENV=dev/APP_ENV=prod/' backend/.env 2>/dev/null || sed -i 's/APP_ENV=dev/APP_ENV=prod/' backend/.env
+	rm -rf backend/vendor
+	@echo "${YELLOW}Building images...${RESET}"
 	docker compose --profile prod build
+	@echo "${YELLOW}Starting containers...${RESET}"
 	docker compose --profile prod up -d
-	docker compose exec backend composer install --no-dev --optimize-autoloader
+	@echo "${YELLOW}Waiting for services to be ready...${RESET}"
+	@sleep 5
+	@echo "${YELLOW}Installing backend dependencies...${RESET}"
+	docker compose exec backend sh -c "composer clear-cache && composer install --no-dev --optimize-autoloader"
+	@echo "${YELLOW}Generating JWT keys...${RESET}"
+	$(MAKE) jwt-keys
+	@echo "${YELLOW}Running database migrations...${RESET}"
 	$(MAKE) db-migrate
-	@echo "${GREEN}Setup complete! Access https://localhost${RESET}"
+	@echo "${GREEN}✓ Setup complete! Access https://localhost${RESET}"
 
 install-dev: certs ## Development setup (hot reload)
+	@echo "${YELLOW}Cleaning up existing Docker resources...${RESET}"
+	docker compose --profile dev --profile prod down --remove-orphans 2>/dev/null || true
+	docker network prune -f 2>/dev/null || true
 	cp -n .env.example .env || true
+	cp -n backend/.env.example backend/.env || true
+	@sed -i '' 's/APP_ENV=prod/APP_ENV=dev/' .env 2>/dev/null || sed -i 's/APP_ENV=prod/APP_ENV=dev/' .env
+	@sed -i '' 's/APP_ENV=prod/APP_ENV=dev/' backend/.env 2>/dev/null || sed -i 's/APP_ENV=prod/APP_ENV=dev/' backend/.env
+	rm -rf backend/vendor
+	@echo "${YELLOW}Building images...${RESET}"
 	docker compose --profile dev build
+	@echo "${YELLOW}Starting containers...${RESET}"
 	docker compose --profile dev up -d
-	docker compose exec backend composer install
+	@echo "${YELLOW}Waiting for services to be ready...${RESET}"
+	@sleep 5
+	@echo "${YELLOW}Installing backend dependencies...${RESET}"
+	docker compose exec backend sh -c "composer clear-cache && composer install"
+	@echo "${YELLOW}Installing frontend dependencies...${RESET}"
 	docker compose exec frontend npm install
+	@echo "${YELLOW}Generating JWT keys...${RESET}"
+	$(MAKE) jwt-keys
+	@echo "${YELLOW}Running database migrations...${RESET}"
 	$(MAKE) db-migrate
-	@echo "${GREEN}Dev setup complete! Access https://localhost${RESET}"
+	@echo "${GREEN}✓ Dev setup complete! Access https://localhost${RESET}"
 
-certs: ## Generate SSL certificates
-	mkdir -p nginx/certs
+certs: ## Generate SSL certificates (only if they don't exist)
+	@mkdir -p nginx/certs
+	@if [ ! -f nginx/certs/server.key ] || [ ! -f nginx/certs/server.crt ]; then \
+		echo "${YELLOW}Generating SSL certificates...${RESET}"; \
+		openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+			-keyout nginx/certs/server.key \
+			-out nginx/certs/server.crt \
+			-subj "/C=CH/ST=Vaud/L=Montreux/O=Dev/CN=localhost"; \
+		echo "${GREEN}✓ SSL certificates generated${RESET}"; \
+	else \
+		echo "${GREEN}✓ SSL certificates already exist, skipping generation${RESET}"; \
+	fi
+
+certs-renew: ## Force regenerate SSL certificates
+	@mkdir -p nginx/certs
+	@echo "${YELLOW}Removing old certificates...${RESET}"
+	rm -f nginx/certs/server.key nginx/certs/server.crt
+	@echo "${YELLOW}Generating new SSL certificates...${RESET}"
 	openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
 		-keyout nginx/certs/server.key \
 		-out nginx/certs/server.crt \
 		-subj "/C=CH/ST=Vaud/L=Montreux/O=Dev/CN=localhost"
+	@echo "${GREEN}✓ SSL certificates regenerated${RESET}"
+	@echo "${YELLOW}Note: You may need to restart nginx (make restart)${RESET}"
 
 ## Docker
 start: ## Start all containers (prod)
@@ -743,11 +821,27 @@ db-shell: ## Open database shell
 	docker compose exec db psql -U app -d trainrouting
 
 ## Build
-build: ## Build production images
-	docker compose build --no-cache
+build: ## Build production images (no cache)
+	docker compose --profile prod --profile dev build --no-cache
+
+rebuild: ## Clean everything and reinstall (production)
+	@echo "${YELLOW}Cleaning up all containers, volumes, and networks...${RESET}"
+	docker compose --profile dev --profile prod down -v --remove-orphans 2>/dev/null || true
+	docker network prune -f 2>/dev/null || true
+	rm -rf backend/vendor
+	@echo "${YELLOW}Rebuilding from scratch...${RESET}"
+	$(MAKE) install
+
+rebuild-dev: ## Clean everything and reinstall (dev mode)
+	@echo "${YELLOW}Cleaning up all containers, volumes, and networks...${RESET}"
+	docker compose --profile dev --profile prod down -v --remove-orphans 2>/dev/null || true
+	docker network prune -f 2>/dev/null || true
+	rm -rf backend/vendor
+	@echo "${YELLOW}Rebuilding from scratch...${RESET}"
+	$(MAKE) install-dev
 
 clean: ## Remove containers, volumes, and generated files
-	docker compose down -v --remove-orphans
+	docker compose --profile dev down -v --remove-orphans
 	rm -rf backend/var/cache backend/var/log backend/vendor
 	rm -rf frontend/node_modules frontend/dist frontend/coverage
 	rm -rf nginx/certs/*.key nginx/certs/*.crt
@@ -759,8 +853,18 @@ shell-backend: ## Open backend shell
 shell-frontend: ## Open frontend shell
 	docker compose exec frontend sh
 
-jwt-keys: ## Generate JWT keys
-	docker compose exec backend php bin/console lexik:jwt:generate-keypair --skip-if-exists
+jwt-keys: ## Generate JWT keys (only if they don't exist)
+	@echo "${YELLOW}Checking JWT keys...${RESET}"
+	@docker compose exec backend php bin/console lexik:jwt:generate-keypair --skip-if-exists
+	@echo "${GREEN}✓ JWT keys ready${RESET}"
+
+jwt-keys-renew: ## Force regenerate JWT keys
+	@echo "${YELLOW}Removing old JWT keys...${RESET}"
+	docker compose exec backend rm -f config/jwt/private.pem config/jwt/public.pem
+	@echo "${YELLOW}Generating new JWT keys...${RESET}"
+	docker compose exec backend php bin/console lexik:jwt:generate-keypair
+	@echo "${GREEN}✓ JWT keys regenerated${RESET}"
+	@echo "${YELLOW}Note: All existing tokens are now invalid${RESET}"
 ```
 
 ### Usage
@@ -862,6 +966,29 @@ APP_ENV=dev
 - Never commit `.env` file
 - Use secrets management in CI (GitHub Actions secrets)
 - Rotate JWT_SECRET in production
+
+### JWT Keys Management
+
+JWT keys are automatically generated during `make install` and `make install-dev`. Like SSL certificates, they are **not regenerated** on subsequent runs.
+
+```bash
+# Automatic generation (part of make install)
+make jwt-keys           # Only generates if missing (--skip-if-exists)
+
+# Force regeneration (if keys are compromised or need rotation)
+make jwt-keys-renew     # Deletes and recreates keys
+```
+
+**Important**:
+- JWT keys are stored in `backend/config/jwt/private.pem` and `public.pem`
+- These keys are gitignored for security
+- Regenerating keys invalidates all existing JWT tokens
+- Use `make jwt-keys-renew` for key rotation in production
+
+**Generating test tokens**:
+```bash
+make jwt-token          # Generates a token for api_user
+```
 
 ---
 

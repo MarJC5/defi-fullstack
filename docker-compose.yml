@@ -87,10 +87,10 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-      target: build
+      target: prod
     volumes:
-      - frontend_dist:/app/dist
-      - ./data:/app/dist/public/data:ro
+      - frontend_dist:/target
+      - ./data:/output/dist/data:ro
 
   # Database
   db:

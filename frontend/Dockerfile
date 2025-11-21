@@ -20,7 +20,12 @@ RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 COPY . .
 RUN npm run build
 
-# Production stage - output built files
-FROM scratch AS prod
+# Production stage - copy build to volume
+FROM node:20-alpine AS prod
 
-COPY --from=build /app/dist /dist
+WORKDIR /output
+
+COPY --from=build /app/dist ./dist
+
+# Script to copy files to mounted volume and exit
+CMD ["sh", "-c", "if [ -d /target ]; then rm -rf /target/* && cp -r /output/dist/* /target/; fi; echo 'Build copied to volume'; exit 0"]
