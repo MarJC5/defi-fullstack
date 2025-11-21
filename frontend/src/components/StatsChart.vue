@@ -66,6 +66,7 @@
             <v-card-text>
               <DistanceChart
                 data-testid="stats-chart"
+                :group-by="stats.groupBy"
                 :labels="chartData.labels"
                 :values="chartData.values"
               />

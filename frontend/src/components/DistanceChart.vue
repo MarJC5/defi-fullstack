@@ -21,7 +21,7 @@
         </v-icon>
         Horizontal
       </v-btn>
-      <v-btn value="pie">
+      <v-btn v-if="props.groupBy === 'none'" value="pie">
         <v-icon start>
           mdi-chart-pie
         </v-icon>
@@ -64,7 +64,7 @@
     Title,
     Tooltip,
   } from 'chart.js'
-  import { computed, ref } from 'vue'
+  import { computed, ref, watch } from 'vue'
   import { Bar, Pie } from 'vue-chartjs'
 
   // Register Chart.js components
@@ -81,11 +81,27 @@
   interface Props {
     labels: string[]
     values: number[]
+    groupBy?: 'day' | 'month' | 'year' | 'none'
   }
 
-  const props = defineProps<Props>()
+  const props = withDefaults(defineProps<Props>(), {
+    groupBy: 'none',
+  })
 
-  const chartType = ref<'bar' | 'horizontalBar' | 'pie'>('bar')
+  // Initialize chart type based on groupBy prop
+  function getInitialChartType (): 'bar' | 'horizontalBar' | 'pie' {
+    // If grouped by time (not 'none'), start with bar chart
+    return props.groupBy === 'none' ? 'bar' : 'bar'
+  }
+
+  const chartType = ref<'bar' | 'horizontalBar' | 'pie'>(getInitialChartType())
+
+  // Watch for groupBy changes and switch away from pie if needed
+  watch(() => props.groupBy, newGroupBy => {
+    if (newGroupBy !== 'none' && chartType.value === 'pie') {
+      chartType.value = 'bar'
+    }
+  })
 
   const totalDistance = computed(() => {
     return props.values.reduce((sum, val) => sum + val, 0)

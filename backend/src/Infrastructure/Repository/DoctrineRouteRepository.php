@@ -99,10 +99,10 @@ class DoctrineRouteRepository implements RouteRepositoryInterface
             $sql .= ", $groupExpression";
         }
 
-        $sql .= ' ORDER BY r.analytic_code';
-
         if ($groupBy !== 'none') {
-            $sql .= ', "group"';
+            $sql .= ' ORDER BY "group", r.analytic_code';
+        } else {
+            $sql .= ' ORDER BY r.analytic_code';
         }
 
         $connection = $this->entityManager->getConnection();

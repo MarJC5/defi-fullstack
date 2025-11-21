@@ -1,142 +1,422 @@
-# 🚆 Défi Full stack - Routage de Train & Statistiques
+# DeFi Fullstack - Train Routing & Analytics
 
-Bienvenue dans notre défi technique !  
-Avant même l’envoi de ton CV, nous te proposons de passer par cette étape pratique. Pourquoi ? Parce que nous croyons que **le code parle plus fort que les mots**.
-
-Ce défi est ton ticket d’entrée : il te permet de nous montrer l’étendue de tes capacités à **collaborer, analyser et livrer du code de qualité**. Tu le réalises chez toi, dans ton environnement, avec tes outils, mais l’objectif est de voir comment tu t’adaptes à notre culture technique et à nos pratiques **DevSecOps**.
+A railway traffic management system built with **PHP 8.4 (Symfony 7)** and **Vue.js 3 + Vuetify 3**. Calculate distances between train stations and analyze traffic statistics with a modern, secure, and containerized architecture.
 
 ---
 
-## 🤝 Esprit du défi
-Ce défi est autant une **démonstration de tes compétences** qu’une **simulation de collaboration** dans notre environnement.  
-Nous ne cherchons pas la perfection : nous voulons voir ta capacité à t’approprier un contexte technique exigeant, à produire du code de qualité et à réfléchir comme un membre de l’équipe.
+## Quick Start
 
-Tu es invité à démontrer ta capacité à :
-- Travailler avec des outils similaires aux nôtres (**Docker, Composer, GitLab, PHPUnit**, etc.)
-- Appliquer des pratiques comme **l’analyse statique**, le **TDD**, le **DDD** et l’**intégration/déploiement continus**
-- Produire un code **propre, maintenable et réfléchi**, comme si tu faisais déjà partie de l’équipe
+### Option 1: Using Makefile (Recommended)
 
-> 💡 Conseil : documente tes choix, structure ton code et montre-nous comment tu raisonnes. C’est tout aussi important que le résultat final.
+The project includes a [Makefile](Makefile) with convenient commands for common tasks:
 
----
+```bash
+# Production setup (optimized, no hot reload)
+make install
 
-## 🧩 Notre environnement
-Nous produisons des applications web modernes, sécurisées et performantes, en utilisant principalement :
-- **Backend** : PHP 8 (Symfony 7 et CakePHP 5)
-- **Frontend** : Vue.js 3 + Vuetify 3 + TypeScript
-- **Tests** : PHPUnit, Vitest, Jest
-- **Linter** : PHPCS, ESLint, Prettier
-- **UI/UX** : Storybook
-- **Base de données** : PostgreSQL ou MariaDB
-- **Infrastructure** : Docker, Docker Compose, TeamCity (CI/CD), Gitlab (code versioning)
-- **Méthodologies** : TDD, DDD, XP
+# Development setup (with hot reload)
+make install-dev
 
-> 💡 Conseil : inspire-toi de nos pratiques et de nos outils.
+# View all available commands
+make help
+```
 
----
+> **Note**: SSL certificates and JWT keys are generated automatically on first run and reused on subsequent installations. Use `make certs-renew` or `make jwt-keys-renew` if you need to regenerate them (e.g., certificate expiry or key rotation).
 
-# 🧾 Instructions pour réaliser le défi
-Tu dois réaliser une solution à minimum deux niveaux. Un backend PHP 8 exposant une API REST conforme à la spécification OpenAPI fournie ainsi qu'un frontend TypeScript consommant cette API.
+### Option 2: Using Docker Compose directly
 
-## Le contexte
-Dans le métier de la circulation ferroviaire, les trajets de chaque train sont répertoriés dans un système de gestion du trafic. Un train circule sur une ligne, ces lignes sont parfois connectées, permettant à un train de circuler sur plusieurs lignes.
-Chaque trajet est associé à un code analytique, qui permet de catégoriser le type de trajet (ex : fret, passager, maintenance, etc.).
-Les données de statistiques générées sont ensuite utilisées pour diverses analyses.
+The project uses Docker Compose profiles to separate production and development environments:
 
-## Le besoin métier
-La solution doit permettre à l'utilisateur de calculer une distance entre deux stations de train. La liste des stations ainsi que les distances entre les stations sont fournies dans les fichiers `stations.json` et `distances.json`.
+| Profile | Description | Services |
+|---------|-------------|----------|
+| `prod` | Production mode | nginx, backend, frontend-builder (static build), db |
+| `dev` | Development mode | nginx-dev, backend, frontend (hot reload), db |
 
-Tu peux choisir de persister les saisies des utilisateurs, cela t'aidera à compléter les points Bonus (voir ci-dessous), mais ce n'est pas obligatoire.
+```bash
+# Production mode (optimized build, static frontend)
+docker compose --profile prod up -d
 
-Il se peut que tu aies des questions ou des incertitudes sur la compréhension du besoin, dans ce cas, tu es libre de faire des hypothèses raisonnables et de les documenter.
+# Development mode (hot reload for frontend)
+docker compose --profile dev up -d
+```
 
-> 💡 Conseil : applique le principe fondamental de [qualité du craftsmanship](https://fr.wikipedia.org/wiki/Software_craftsmanship#Fondamentalement_:_un_retour_non_r%C3%A9f%C3%A9renc%C3%A9_%C3%A0_XP).
+> **Note**: The profiles are mutually exclusive. Production uses static frontend files served by nginx, while development uses Vite dev server with hot module replacement.
 
-## Livrables attendus
-Lorsque tu as terminé, envoie à n.girardet[at]mob[point]ch, ton dossier de candidature complet ainsi qu'un lien vers le projet contenant :
-- Le projet prêt à déployer, au format que tu préfères : un repo GitHub avec un docker-compose, une image publiée dans un registre, un fichier zip dans une release GitHub...
-- Les instructions de déploiement claires
-- L'accès au repository du code source, y compris l'historique des commits
+### Access the Application
 
-> ⚠️ Assure-toi qu'un lien vers ton projet est visible et actif dans ton e-mail. 👉 Nous ne traiterons pas les dossiers de candidatures avant d'avoir vu le code.
-
-## ⏳ Durée du défi
-
-Tu n’as aucune limite de temps pour réaliser ce défi. Avance à ton rythme, prends le temps de réfléchir et de coder comme tu le souhaites. Ce repository restera ouvert tant que nous n’aurons pas trouvé la bonne personne pour rejoindre l’équipe. Une fois que ce sera le cas, nous le fermerons.
-
-> 💡 Même si la vitesse n’est pas un critère, nous examinerons les candidatures dans l’ordre où elles nous parviennent.
-
-## Et après ?
-Nous procéderons à une revue de ton code et nous te contacterons pour t'informer de la suite.
-
-> 🚫 N'envoie pas de fichiers volumineux (ex : 30 Mo) par e-mail
+- **Frontend**: https://localhost (or configured domain)
+- **Backend API**: https://localhost/api
+- **API Documentation**: See [docs/openapi.yml](docs/openapi.yml)
 
 ---
 
-## 🎯 Objectifs
+## Screenshots
 
-- Implémenter un **backend PHP 8** exposant une API conforme à la spécification **OpenAPI** fournie.
-- Développer un **frontend TypeScript** consommant cette API.
-- Fournir une **couverture de code** mesurable (tests unitaires et d’intégration).
-- Déployer l’application avec un minimum d’opérations via **Docker** ou **Docker Compose**.
-- Mettre en place un **pipeline CI/CD complet** (build, tests, coverage, lint, déploiement).
-- Utiliser un **versioning de code** clair et structuré.
-- Garantir des **communications sécurisées** (HTTPS, gestion des secrets, authentification).
+### Route Calculator
+Calculate the shortest path between two stations using Dijkstra's algorithm:
 
----
+![Route Calculator](directives/screenshots/screenshot-form.png)
 
-## 🏗️ Architecture attendue
+### Route Results
+View detailed route information with path and distance:
 
-- **Backend**  
-  - PHP 8.4 obligatoire.
-  - Utilisation d'un Framework (Symfony, CakePHP, Slim, Laravel,...) facultatif.  
-  - Implémentation stricte de l’API OpenAPI fournie.  
-  - Tests avec PHPUnit + rapport de couverture.  
+![Route Results](directives/screenshots/screenshot-result.png)
 
-- **Frontend**
-  - TypeScript 5 obligatoire.
-  - Interface utilisateur pour :  
-    - Créer un trajet (station A → station B) + type de trajet.  
-    - Consulter les statistiques par code analytique.
-  - Tests avec Vitest/Jest + rapport de couverture.
+### Statistics & Analytics
+Visualize aggregated distances with interactive charts and grouping options:
 
-- **Infrastructure** 
-  - Docker Engine 25
-  - Docker/Docker Compose pour orchestrer backend, frontend, base de données et reverse proxy (si nécessaire).  
-  - Déploiement en une commande (`docker compose up -d`).  
-
-> 💡 Conseil : documente tes choix dans une documentation.
+![Statistics Dashboard](directives/screenshots/screenshot-stats.png)
 
 ---
 
-## 🔄 CI/CD complet
+## Features
 
-Voici notre point de vue de la représentation d'un CI/CD complet :
-- Build : images backend/frontend
-- Qualité : lint + tests + coverage (fail si seuils non atteints)
-- Sécurité : SAST/DAST (ex: phpstan, npm audit, Trivy)
-- Release : tagging sémantique ou calendaire, changelog
-- Delivery : push images vers registry, déploiement automatisé (Compose ou SSH)
+### Core Functionality
+- **Route Calculation**: Calculate shortest path and distance between any two stations using Dijkstra algorithm
+- **Multi-line Support**: Handle routes across MOB and MVR-ce rail networks with interconnections
+- **Analytic Tracking**: Categorize journeys by analytic codes (freight, passenger, maintenance, etc.)
 
-## 🤖 Code généré par IA
-
-Tu es libre d’utiliser les outils qui te semblent les plus adaptés pour réaliser ce défi. Cela inclut bien sûr le code généré par des intelligences artificielles. Nous savons que ces outils font partie du quotidien des développeurs, et nous voulons voir comment tu es capable de les intégrer intelligemment dans ta solution.
-
-## 🎁 Les points Bonus
-- Implémenter un algorithme de routage (ex. Dijkstra) pour calculer la distance entre deux stations.
-- Exposer un endpoint de statistiques agrégées par code analytique.
-- Visualiser ces statistiques dans le frontend (graphique/tableau).
-
-## ✅ Critères d’évaluation
-- Couverture : rapports générés et seuils respectés
-- OpenAPI : conformité stricte des endpoints et schémas
-- Docker : démarrage en une ou deux commandes, documentation claire
-- Frontend : UX propre, typé en TypeScript, tests présents
-- CI/CD : pipeline fiable, scans basiques de sécurité, images publiées
-- Sécurité : HTTPS, auth, headers, gestion des secrets
-- Qualité : code lisible, commits atomiques, architecture cohérente
+### Bonus Features
+- **Statistics Aggregation**: View aggregated distances by analytic code
+- **Time-based Filtering**: Filter statistics by date ranges
+- **Grouping Options**: Group data by day, month, year, or no grouping
+- **Visual Analytics**: Charts and tables for traffic analysis
 
 ---
-## 🚀 À toi de jouer !
-Nous avons hâte de découvrir ta solution et de voir comment tu abordes ce défi.  
-Bonne chance, et surtout amuse-toi en codant !
+
+## Architecture
+
+This project follows **Domain-Driven Design (DDD)** principles with **Test-Driven Development (TDD)** practices.
+
+### Tech Stack
+
+| Layer | Technology | Purpose |
+|-------|-----------|---------|
+| **Backend** | PHP 8.4 + Symfony 7 | REST API with DDD architecture |
+| **Frontend** | Vue.js 3 + Vuetify 3 + TypeScript | Modern SPA with Material Design |
+| **Database** | PostgreSQL | Data persistence |
+| **Web Server** | Nginx | Reverse proxy with HTTPS |
+| **Container** | Docker + Docker Compose | Orchestration and deployment |
+| **Testing** | PHPUnit + Vitest | Unit and integration tests |
+| **Quality** | PHPCS + PHPStan + ESLint | Code standards and static analysis |
+
+### Key Architectural Decisions
+
+- **DDD Layering**: Clean separation between Domain, Application, and Infrastructure layers
+- **Value Objects**: Type-safe primitives (StationId, Distance, AnalyticCode)
+- **XML ORM Mapping**: Keep domain entities free from framework dependencies
+- **JWT Authentication**: Secure API access with Bearer tokens
+- **TDD Workflow**: Red-Green-Refactor cycle for all features
+
+For detailed architecture documentation, see [directives/1-architecture.md](directives/1-architecture.md).
+
+---
+
+## Project Documentation
+
+This project includes comprehensive development directives in the [directives/](directives/) folder:
+
+| Directive | Description |
+|-----------|-------------|
+| [0-requirements.md](directives/0-requirements.md) | Business requirements, API specification, technical stack, and evaluation criteria |
+| [1-architecture.md](directives/1-architecture.md) | Project structure, DDD/TDD principles, domain model, and implementation strategy |
+| [2-infrastructure.md](directives/2-infrastructure.md) | Docker configuration, networking, volumes, and deployment instructions |
+| [3-database.md](directives/3-database.md) | Database schema, migrations, seeding, and Doctrine configuration |
+| [4-backend.md](directives/4-backend.md) | Symfony setup, routing, authentication, testing, and linting |
+| [5-frontend.md](directives/5-frontend.md) | Vue.js structure, components, routing, API integration, and testing |
+| [6-conventions.md](directives/6-conventions.md) | Commit messages, branch naming, code style, and documentation standards |
+| [7-authentication.md](directives/7-authentication.md) | JWT implementation, token generation, and security configuration |
+
+These directives serve as both **development guides** and **technical documentation** for the project.
+
+---
+
+## Development
+
+### Prerequisites
+
+- Docker Engine 25+
+- Docker Compose
+- Make (optional, but highly recommended for convenience)
+
+### Makefile Commands
+
+The [Makefile](Makefile) provides shortcuts for all common development tasks. Run `make help` to see all available commands:
+
+```bash
+# Setup
+make install          # Production setup (optimized build)
+make install-dev      # Development setup (hot reload enabled)
+make certs           # Generate SSL certificates
+
+# Docker operations
+make start           # Start containers (production mode)
+make start-dev       # Start containers (development mode)
+make stop            # Stop all containers
+make restart         # Restart containers (production)
+make restart-dev     # Restart containers (development)
+make logs            # Show all logs
+make logs-backend    # Show backend logs only
+make logs-frontend   # Show frontend logs only
+
+# Testing
+make test            # Run all tests (backend + frontend)
+make test-backend    # Run backend tests only
+make test-frontend   # Run frontend tests only
+make coverage        # Generate coverage reports for both
+make coverage-backend # Backend coverage report
+make coverage-frontend # Frontend coverage report
+
+# Code quality
+make lint            # Lint all code
+make lint-backend    # Lint backend (PHPCS + PHPStan)
+make lint-frontend   # Lint frontend (ESLint)
+make lint-fix        # Auto-fix linting issues
+
+# Database
+make db-migrate      # Run database migrations
+make db-reset        # Reset database (WARNING: destroys data)
+make db-shell        # Open PostgreSQL shell
+make db-seed         # Seed database with test statistics data (usage: make db-seed COUNT=200)
+
+# Build & Rebuild
+make build           # Build images without cache
+make rebuild         # Rebuild and restart (prod mode)
+make rebuild-dev     # Rebuild and restart (dev mode)
+
+# Utilities
+make shell-backend   # Open backend container shell
+make shell-frontend  # Open frontend container shell
+make jwt-keys        # Generate JWT keypair
+make jwt-token       # Generate JWT token for testing
+make clean           # Remove containers, volumes, and generated files
+```
+
+### Important: Production vs Development Mode
+
+**Production Mode** (`make install`):
+- Frontend is **built once** into static files at image build time
+- Changes to frontend code **require rebuilding**: `make rebuild`
+- Optimized for performance, smaller bundle size
+- Use for testing production builds
+
+**Development Mode** (`make install-dev`):
+- Frontend code is **mounted as a volume** with hot reload
+- Changes are **instantly visible** without rebuilding
+- Runs Vite dev server with HMR (Hot Module Replacement)
+- Use for active development
+
+**When you change code**:
+```bash
+# If in production mode, rebuild is required
+make rebuild       # Cleans everything and runs `make install` from scratch
+
+# If in dev mode, just save the file - changes are automatic
+# No rebuild needed!
+```
+
+> **Note**: The `make rebuild` command completely cleans your environment (containers, volumes, networks, vendor folder) and runs `make install` from scratch. This guarantees you always have a fresh, working environment with the latest code.
+
+### Manual Setup (without Make)
+
+```bash
+# Clone the repository
+git clone <repository-url>
+cd defi-fullstack
+
+# Copy environment configuration
+cp .env.example .env
+cp backend/.env.example backend/.env
+
+# Generate SSL certificates
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout nginx/certs/server.key \
+  -out nginx/certs/server.crt \
+  -subj "/C=CH/ST=Vaud/L=Montreux/O=Dev/CN=localhost"
+
+# Start all services (choose profile)
+docker compose --profile prod up -d   # Production mode
+# OR
+docker compose --profile dev up -d    # Development mode with hot reload
+
+# Install backend dependencies
+docker compose exec backend composer install
+
+# Install frontend dependencies
+docker compose exec frontend npm install
+
+# Generate JWT keys
+docker compose exec backend php bin/console lexik:jwt:generate-keypair
+
+# Run migrations
+docker compose exec backend php bin/console doctrine:migrations:migrate
+
+# View logs
+docker compose logs -f
+```
+
+### Running Tests
+
+```bash
+# Using Makefile (recommended)
+make test              # Run all tests
+make coverage          # Generate coverage reports
+
+# Or manually
+docker compose exec backend ./vendor/bin/phpunit
+docker compose exec frontend npm test
+```
+
+**Coverage Reports:**
+- Coverage reports are generated locally in `backend/var/coverage/` and `frontend/coverage/`
+- These folders are excluded from version control (see `.gitignore`)
+- CI/CD pipeline generates and uploads coverage reports as artifacts
+- Minimum coverage thresholds: **70%** for both backend and frontend
+- View reports locally: Open `backend/var/coverage/index.html` or `frontend/coverage/index.html` in a browser after running `make coverage`
+
+### Database Migrations
+
+```bash
+# Using Makefile
+make db-migrate
+
+# Or manually
+docker compose exec backend php bin/console doctrine:migrations:migrate
+docker compose exec backend php bin/console make:migration
+```
+
+### Seeding Test Data
+
+For testing the statistics features, you can seed the database with realistic route data:
+
+```bash
+# Seed with 100 routes (default)
+make db-seed
+
+# Seed with custom number of routes
+make db-seed COUNT=200
+```
+
+This command:
+- Generates routes using the actual API (respects Dijkstra algorithm)
+- Creates varied analytic codes (MOB, MVR-ce)
+- Distributes route creation dates over the last 90 days
+- Provides realistic data for testing statistics aggregation and visualization
+
+---
+
+## API Usage
+
+### Authentication
+
+All API endpoints require JWT Bearer token authentication:
+
+```bash
+# Obtain token (implementation specific)
+export TOKEN="your-jwt-token"
+
+# Use token in requests
+curl -H "Authorization: Bearer $TOKEN" https://localhost/api/v1/routes
+```
+
+### Calculate Route
+
+```bash
+POST /api/v1/routes
+Content-Type: application/json
+Authorization: Bearer <token>
+
+{
+  "fromStationId": "MX",
+  "toStationId": "ZW",
+  "analyticCode": "ANA-123"
+}
+```
+
+**Response:**
+```json
+{
+  "id": "uuid",
+  "fromStationId": "MX",
+  "toStationId": "ZW",
+  "analyticCode": "ANA-123",
+  "distanceKm": 62.08,
+  "path": ["MX", "CGE", "...", "ZW"],
+  "createdAt": "2025-01-01T00:00:00Z"
+}
+```
+
+### Get Statistics (Bonus)
+
+```bash
+GET /api/v1/stats/distances?from=2025-01-01&to=2025-12-31&groupBy=month
+Authorization: Bearer <token>
+```
+
+For complete API documentation, see [docs/openapi.yml](docs/openapi.yml).
+
+---
+
+## CI/CD Pipeline
+
+This project includes a complete CI/CD pipeline (GitHub Actions / GitLab CI):
+
+1. **Build**: Backend and frontend Docker images
+2. **Quality**: Linting, tests, and coverage thresholds
+3. **Security**: Static analysis (PHPStan, npm audit, Trivy)
+4. **Release**: Semantic versioning and changelog generation
+5. **Delivery**: Push to container registry and automated deployment
+
+See [.github/workflows/ci.yml](.github/workflows/ci.yml) for implementation details.
+
+---
+
+## Security
+
+### Implemented Security Measures
+
+- HTTPS (TLS 1.2/1.3) with Nginx
+- JWT Bearer token authentication
+- Secure HTTP headers (HSTS, CSP, X-Frame-Options, etc.)
+- CORS configuration
+- Secrets management (no .env in commits)
+- Docker security best practices
+- SAST/DAST scanning in CI pipeline
+
+For detailed security implementation, see [directives/7-authentication.md](directives/7-authentication.md).
+
+---
+
+## Network Structure
+
+### MOB Line
+Main axis: **MX -> ZW** with branches to:
+- **LENK** branch
+- **IO** (Interlaken) branch
+
+### MVR-ce Line
+- **VV -> PLEI** connection
+- **BLON -> CABY** connection
+
+### Interconnection
+Lines connect at **CABY** station (shared between MOB and MVR-ce).
+
+---
+
+## Contributing
+
+This project follows strict development conventions:
+
+- **Commit Messages**: Conventional Commits format (`type(scope): description`)
+- **Branch Naming**: `type/short-description` format
+- **Code Style**: PSR-12 (PHP), ESLint + Prettier (TypeScript)
+- **Testing**: TDD approach with minimum 70% coverage (backend and frontend)
+- **Code Review**: All changes require PR review and passing CI checks
+
+See [directives/6-conventions.md](directives/6-conventions.md) for detailed guidelines.
+
+---
+
+## License
+
+This project is part of a technical challenge. See repository details for licensing information.
